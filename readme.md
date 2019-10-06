@@ -64,7 +64,7 @@ This little Python project started off as a proof of concept that the same hardw
 
 #### Can High Density (HD) floppy disks like FD2000 disks for Commodore computers be supported in the future?
 
-I guess that it would make sense to do this with a different microcontroller that is faster than 16 Mhz. It looks like Fluxengine can be used for that already: Please have a look at (my little report about this format)[https://github.com/davidgiven/fluxengine/issues/107]
+I guess that it would make sense to do this with a different microcontroller that is faster than 16 Mhz. It looks like Fluxengine can be used for that already: Please have a look at [my little report about this format](https://github.com/davidgiven/fluxengine/issues/107)
 
 ## Credits
 This tool relies on the work of many people (be it through other software components or providing documentation on the web) who all deserve a thank you. Additionally, I would particularly like to thank Robert Smith and David Given for their work on imaging floppy disks and publishing their work as open source projects.
