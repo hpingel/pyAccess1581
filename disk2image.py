@@ -136,7 +136,7 @@ class IBMDoubleDensityFloppyDiskImager:
     '''
     def __init__( self, diskFormat, imagename, retries, serialDevice ):
 
-        print ("Selected disk format is " + diskFormat.name + ", we expected " + str(diskFormat.expectedSectorPerTrack) + "sectors per track")
+        print ("Selected disk format is " + diskFormat.name + ", we expect " + str(diskFormat.expectedSectorPerTrack) + " sectors per track")
         print ("Target image file is: " + imagename)
         print ("Serial device is: " + serialDevice)
 
