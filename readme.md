@@ -55,9 +55,9 @@ No, I don't own a 1581 floppy drive. I would like to own one, but collector's pr
 #### Where did you get authentic floppy media from if you don't own a 1581 floppy drive yourself?
 With the VC1581 it's a bit of a chicken and egg problem. Commercial software was never published in the 1581 format back in the days - the 1541 disk drive was the lowest common denominator that had the biggest market share. So the 1581 was always used in conjunction with empty disks that were formatted and filled at home. The lack of commercial releases on 3.5" disk for Commodore 64/128 also means that there were hardly any copy protections in place and as a consequence there was no raw image format needed next to d81 (that only contains the data chunks of the sectors) that would reflect irregularities of floppy track content caused by any kind of copy protection.
 
-Where was I? Ahh... As I didn't own any 3.5" DD floppy disks (except for my HP printer DOS driver disk from 1995 that I found the other day) I bought a few boxes of used Amiga disks and then used an ancient PC I assembled in 2002 including a PC floppy drive and found in the cellar of my parents. Using Linux, I was able to configure the disk drive in a way that is officially acknowledged to be usable to create valid disk images for the 1581 disk drive.
+Where was I? Ahh... As I didn't own any 3.5" DD floppy disks (except for my HP printer DOS driver disk from 1995 that I found the other day) I recently bought a few boxes of used Amiga disks and then used an ancient PC I discovered in the cellar of my parents. That PC from 2002 included a 3.5" floppy drive. Using Linux, I was able to configure the disk drive in a way that is acknowledged to be feasable to write valid disks for the 1581 disk drive.
 
-To enforce the 1581 format on my Linux OS I used fdutils and had do the following:
+To enforce the 1581 format on my Linux OS I used ```fdutils```` and had do the following:
 
 ```
 mknod /dev/fd0cbm1581 b 2 124
