@@ -26,7 +26,7 @@ For further information on the Amiga floppy reader/writer hardware please check 
 
 Please call script to display help:
 ```
-disk2image.py -h
+$ python3 disk2image.py -h
 ```
 ## FAQ
 
