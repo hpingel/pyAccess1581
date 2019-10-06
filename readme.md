@@ -6,6 +6,8 @@ pyAccess1581 can create disk images of specific double density (DD) floppy disks
 
 Warning: This software is in a highly experimental alpha state - potentially full of bugs and surprises. Don't use it with the intention to create reliable backups of your data. Always write-protect your floppy disks before using it with this tool!
 
+Python code written by Henning Pingel, reusing hardware interface of ["Arduino Amiga Floppy Disk Reader/Writer"](http://amiga.robsmithdev.co.uk/) by Robert Smith
+
 ## Software requirements
 
 To run this tool on your PC/Notebook you need to have Python3 language installed. I personally tested it with Python 3.6.x and 3.7.x on Linux and Windows 10. It might run on MacOS (untested).
