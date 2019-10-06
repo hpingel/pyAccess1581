@@ -18,9 +18,9 @@ You need to install a number of Python modules: pyserial, crcmod, bitstring...
 
 This tool only works in conjunction with a specific hardware interface that bridges the gap between an ordinary modern PC/Notebook and a vintage 3.5" PC floppy drive. The hardware interface is based on an 16Mhz Arduino running a specific firmware. The modern PC communicates with the Arduino via a serial connection over a USB cable. A FTDI USB adapter is used for this USB tunnelling task. The Arduino communicates with the floppy drive using its GPIO pins.
 
-This mandatory hardware interface and the firmware for the Arduino were already designed long before this Python based project came into existence: They were actually engineered for another open source project created by Robert Smith in 2017 and 2018: The ["Arduino Amiga Floppy Disk Reader/Writer"](http://amiga.robsmithdev.co.uk/). pyAccess1581 is only reusing the nice features that Robert has implemented already. At this time, pyAccess1581 is simply reusing the set of commands that Robert has created to control the floppy drive via a serial connection.
+This mandatory hardware interface and the firmware for the Arduino were already designed long before this Python based project came into existence: They were actually engineered for another open source project created by Robert Smith in 2017 and 2018: The ["Arduino Amiga Floppy Disk Reader/Writer"](http://amiga.robsmithdev.co.uk/). At this time, pyAccess1581 is simply reusing the set of commands that Robert has created to control the floppy drive via a serial connection.
 
-The Arduino Pro Mini 16Mhz 5V that is recommended by Robert is running an ATmega 328. I was able to make Robert's firmware run on an Arduino Pro Micro running an ATmega 32U4 - with modifications. The additional FTDI adapter is needed anyway.
+The Arduino Pro Mini 16Mhz 5V that is recommended by Robert is running an ATmega 328. I was also able to make Robert's firmware run on an Arduino Pro Micro running an ATmega 32U4 - with modifications. The additional FTDI adapter is needed anyway.
 
 For further information on the Amiga floppy reader/writer hardware please check [Robert's instructions](http://amiga.robsmithdev.co.uk/instructions). You can find the source code of Robert's project [here](https://github.com/RobSmithDev/ArduinoFloppyDiskReader) (including the firmware to be flashed on to the Arduino Pro Mini):
 
@@ -34,7 +34,7 @@ $ python3 disk2image.py -h
 
 #### I tried to build it and it doesn't work! Who will help?
 
-First of all, you need to own Double Density Disks to test the reader. Ideally you already have an Amiga formatted DD disk with an adf image already correctly written to it. Then you can use Robert's Windows software called ArduinoFloppyReaderWin.exe and launch the excellent "Run diagnostics" menu item to let the software check if you have assembled the hardware correctly. Please don't bother Robert with problems originating form my Python code.
+First of all, you need to own double density disks to test the reader. Ideally you already have an Amiga formatted DD disk with an adf image already correctly written to it. Then you can use Robert's Windows software called ArduinoFloppyReaderWin.exe and launch the excellent "Run diagnostics" menu item to let the software check if you have assembled the hardware correctly. Please don't bother Robert with problems originating from my Python code.
 
 #### Are there any other projects that do the same stuff?
 
@@ -54,9 +54,9 @@ No, I don't own a 1581 floppy drive. I would like to own one, but collector's pr
 
 #### Does this project only run on specific Arduinos? Why is that the best possible hardware for this kind of project?
 
-While Robert has chosen an Atmega328 based Arduino Pro Mini (16Mhz, 5V), I can offer the alternative to use an Atmega32U4 based Arduino Pro Micro (16Mhz, 5V) instead. I have ported his sketch to the Pro Micro (haven't published this sourcecode yet).
+While Robert has chosen an Atmega328 based Arduino Pro Mini (16Mhz, 5V), I can offer the alternative to use an Atmega32U4 based Arduino Pro Micro (16Mhz, 5V) instead. I have ported his sketch to the Pro Micro (haven't published this sourcecode yet). But the Pro Mini seems to be slightly cheaper anyway.
 
-While learning more about microcontrollers in 2019 and looking at other projects like [Fluxengine](http://cowlark.com/fluxengine/index.html) or [ADF-Copy](https://nickslabor.niteto.de/projekte/adf-copy/) I guess there is a big choice of microcontrollers that could do the job. Robert Smith has chosen a microcontroller that only runs on 16Mhz with a tiny bit of RAM and he was able to prove that it still can be a valid interface running just fast enough to do the proper job of reading and writing DD disks.
+While learning more about micro controllers in 2019 and looking at other projects like [Fluxengine](http://cowlark.com/fluxengine/index.html) or [ADF-Copy](https://nickslabor.niteto.de/projekte/adf-copy/) I guess there is a big choice of microcontrollers that could do the job. Robert Smith has chosen a conveniently low-cost microcontroller that only runs on 16Mhz with a tiny bit of RAM and he was able to prove that it still can be a valid interface running just fast enough to do the proper job of reading and writing DD disks.
 
 #### Why did you start this Python based project? Especially as a project like Fluxengine can do the same?
 
