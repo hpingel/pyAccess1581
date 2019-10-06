@@ -19,8 +19,8 @@
 
     CREDITS
 
-    The class ArduinoFloppyControlInterface imlements the interface that
-    Robert Smith created for his Arduino Amiga Floppy disk reader/writer.
+    The class ArduinoFloppyControlInterface implements the interface that
+    Robert Smith created for the Arduino Amiga Floppy disk reader/writer.
     Robert Smith has released his project under GPL V3. For more information,
     please visit http://amiga.robsmithdev.co.uk/
 
