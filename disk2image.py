@@ -120,6 +120,34 @@ class diskFormatDOS(diskFormatRoot):
         self.sectorStartStringPrefix = "000000000000"
         self.sectorDataStartStringPrefix = "00"
 
+        self.sectorStartMarker = self.getFlexibleRegExString( self.sectorStartStringPrefix + self.sectorStartString)
+        self.sectorDataStartMarker = self.getFlexibleRegExString( self.sectorDataStartStringPrefix + self.sectorDataStartString )
+        self.sectorStartMarkerLength = len( self.sectorStartMarker )
+        self.sectorDataStartMarkerLength = len( self.sectorDataStartMarker )
+        self.sectorDataSize = self.sectorSize * 16
+        self.legalOffsetRangeLowerBorder = 704
+        self.legalOffsetRangeUpperBorder = 716
+        self.legalOffsetRange = range(self.legalOffsetRangeLowerBorder,self.legalOffsetRangeUpperBorder+1)
+
+        #TODO: check value 1320 *8 bits. 512 bytes as data content wrapped in
+        #sector meta data bytes, 1320 is just a good guess that just works
+        #maybe we can shrink it more
+        self.sectorLength = 1320*8
+
+    def getFlexibleRegExString( self, hexString ):
+        searchKey = self.hexString2bitString( hexString )
+        regExString = ""
+        for bit in searchKey:
+            regExString += "." + bit
+        regExString = regExString[1:]
+        return regExString
+
+    def hexString2bitString(self, hexString ):
+        bitString = ""
+        for nibble in hexString:
+            bitString += str(bin(int(nibble,16))[2:]).zfill(4)
+        return bitString
+
 class diskFormat1581(diskFormatDOS):
     def __init__(self):
         super().__init__()
@@ -177,27 +205,23 @@ class SingleTrackSectorListValidator:
         self.minSectorNumber = 1
         self.validSectorData = {}
         self.ArduinoFloppyControlInterface = ArduinoFloppyControlInterface(serialDevice, diskFormat)
+        self.trackParser = SingleIBMTrackSectorParser(self.diskFormat, self.ArduinoFloppyControlInterface)
         self.ArduinoFloppyControlInterface.openSerialConnection()
 
     def printSerialStats(self):
-        (tdtr,tdtc) = self.ArduinoFloppyControlInterface.getStats()
-        print ( "Total duration track read     : " + tdtr + " seconds")
-        print ( "Total duration serial commands: " + tdtc + " seconds")
+        self.trackParser.printSerialStats()
 
     def processTrack(self, trackno, headno):
         trackData = b''
         self.validSectorData = {}
         self.retries = self.maxRetries
-        parser = SingleIBMTrackSectorParser( trackno, headno, self.diskFormat, self.ArduinoFloppyControlInterface)
         while self.retries > 0:
             if self.retries < self.maxRetries:
                 print ("  Repeat track read - attempt " + str( self.maxRetries - self.retries +1 ) + " of " + str(self.maxRetries) )
-            parser.requestRawTrackDataViaSerial()
-            sectors = parser.getSectors()
-            self.addValidSectors( sectors, trackno, headno )
+            self.addValidSectors( self.trackParser.detectSectors(trackno, headno), trackno, headno )
             vsc = len(self.validSectorData)
             print (f"Reading track: {trackno:2d}, head: {headno}. Number of valid sectors found: {vsc}/{self.diskFormat.expectedSectorPerTrack}")
-            if len(self.validSectorData) == self.diskFormat.expectedSectorPerTrack:
+            if vsc == self.diskFormat.expectedSectorPerTrack:
                 self.retries = 0
             else:
                 self.retries = self.retries -1
@@ -238,53 +262,9 @@ class SingleIBMTrackSectorParser:
     for standard IBM PC DD disks (720 KB), the only difference is the number of
     sectors (1581=10 sectors, PC = 9 sectors)
     '''
-    def __init__(self, trackno, headno, diskFormat, ArduinoFloppyControlInterface):
-        self.trackno = trackno
-        self.headno = headno
-        self.readCount = 0
-        self.sectorCount = 0
+    def __init__(self, diskFormat, arduinoFloppyControlInterface):
         self.diskFormat = diskFormat
-        self.sectors = ()
-        self.sectorStartMarker = self.getFlexibleRegExString( self.diskFormat.sectorStartStringPrefix + self.diskFormat.sectorStartString)
-        self.sectorDataStartMarker = self.getFlexibleRegExString( self.diskFormat.sectorDataStartStringPrefix + self.diskFormat.sectorDataStartString )
-        self.sectorStartMarkerLength = len( self.sectorStartMarker )
-        self.sectorDataStartMarkerLength = len( self.sectorDataStartMarker )
-        self.sectorDataSize = self.diskFormat.sectorSize * 16
-        self.legalOffsetRangeLowerBorder = 704
-        self.legalOffsetRangeUpperBorder = 716
-        self.legalOffsetRange = range(self.legalOffsetRangeLowerBorder,self.legalOffsetRangeUpperBorder+1)
-
-        #TODO: check value 1320. 512 bytes as data content wrapped in
-        #sector meta data bytes, 1320 is just a good guess that just works
-        #maybe we can shrink it more
-        self.sectorLength = 1320*8
-
-        if self.diskFormat.swapsides is False:
-            self.headno = 1 if self.headno == 0 else 0
-
-        self.ArduinoFloppyControlInterface = ArduinoFloppyControlInterface
-
-    def requestRawTrackDataViaSerial(self):
-        compressedBytes = self.ArduinoFloppyControlInterface.getCompressedTrackData(self.trackno, self.headno)
-        decompressedBitstream = self.getDecompressedBitstream(compressedBytes)
-        self.sectors = self.detectSectors(decompressedBitstream)
-
-    def getSectors(self):
-        #self.printSectorTable(self.sectors)
-        return self.sectors
-
-    def getDecompressedBitstream(self, compressedBytes):
-        table = { 0: "", 1: "01", 2: "001", 3: "0001"}
-        decompressedBitstream = ""
-        #print( "Length of compressed bitstream: "+ str(len(compressedBitstream)) )
-        for byte in compressedBytes:
-            bits=bin(byte)[2:].zfill(8)
-            for chunk in range(0,4):
-                value=int(bits[chunk*2:chunk*2+2])&3
-                if value > 3:
-                    print ("ERROR decompressBitstream illegal value!")
-                decompressedBitstream += table[value]
-        return decompressedBitstream
+        self.ArduinoFloppyControlInterface = arduinoFloppyControlInterface
 
     def convertBitstreamBytes2Hex( self, data ):
         if data is "":
@@ -298,25 +278,20 @@ class SingleIBMTrackSectorParser:
         ba = BitArray('0b'+data )
         return ba.int
 
-    def hexString2bitString(self, hexString ):
-        bitString = ""
-        for nibble in hexString:
-            bitString += str(bin(int(nibble,16))[2:]).zfill(4)
-        return bitString
-
-    def getFlexibleRegExString( self, hexString ):
-        searchKey = self.hexString2bitString( hexString )
-        regExString = ""
-        for bit in searchKey:
-            regExString += "." + bit
-        regExString = regExString[1:]
-        return regExString
-
     def getCRC(self, data):
         datastring = unhexlify(data)
         #TODO: try to use  binascii.crc_hqx(data, value) instead
         xmodem_crc_func = crcmod.predefined.mkCrcFun('crc-ccitt-false')
         result = hex(xmodem_crc_func( datastring ))[2:].zfill(4)
+        return result
+
+    def mfmDecode( self, stream ):
+        result = ""
+        keep = False;
+        for char in stream:
+            if keep is True:
+                result += char
+            keep = not keep
         return result
 
     def grabSectorChunkHex( self, decompressedBitstream, start, length):
@@ -329,28 +304,28 @@ class SingleIBMTrackSectorParser:
         sectorMarkers = []
         dataMarkers = []
         dataMarkersTmp = []
-        rawSectors = re.split( self.sectorStartMarker, decompressedBitstream)
+        rawSectors = re.split( self.diskFormat.sectorStartMarker, decompressedBitstream)
         del rawSectors[-1]
         previousBits = 0
         for rawSector in rawSectors:
-            previousBits += len( rawSector ) + self.sectorStartMarkerLength
+            previousBits += len( rawSector ) + self.diskFormat.sectorStartMarkerLength
             sectorMarkers.append( previousBits )
-        dataMarkerMatchesIterator = re.finditer( self.sectorDataStartMarker, decompressedBitstream)
+        dataMarkerMatchesIterator = re.finditer( self.diskFormat.sectorDataStartMarker, decompressedBitstream)
         for dataMarker in dataMarkerMatchesIterator:
             (from1, to1) = (dataMarker.span() )
-            if to1 >= sectorMarkers[0] + self.legalOffsetRangeLowerBorder:
+            if to1 >= sectorMarkers[0] + self.diskFormat.legalOffsetRangeLowerBorder:
                 dataMarkersTmp.append(to1)
             else:
                 print("Ignoring datamarker - is in front of first sector marker")
         cnt = 0
         for dataMarker in dataMarkersTmp:
             offset = dataMarker - sectorMarkers[cnt]
-            if not offset in self.legalOffsetRange:
+            if not offset in self.diskFormat.legalOffsetRange:
                 print ("getMarkers / Unusual offset found: "+str(offset))
             #now we check if the sector's data might be cut off at the end
             #of the chunk of the track we have, the added 32 represents
             #the CRC checksum of the sector data
-            overshoot = dataMarker + self.sectorDataSize + 32
+            overshoot = dataMarker + self.diskFormat.sectorDataSize + 32
             if overshoot <= len( decompressedBitstream ):
                 dataMarkers.append( dataMarker )
                 cnt+=1
@@ -359,10 +334,13 @@ class SingleIBMTrackSectorParser:
                 sectorMarkers.remove(sectorMarkers[cnt])
         return (sectorMarkers, dataMarkers)
 
-    def detectSectors(self, decompressedBitstream):
-        sectors = []
-        (sectorMarkers, dataMarkers) = self.getMarkers(decompressedBitstream)
+    def detectSectors(self, trackno, headno):
         cnt = 0
+        sectors = []
+        if self.diskFormat.swapsides is False:
+            headno = 1 if headno == 0 else 0
+        decompressedBitstream = self.ArduinoFloppyControlInterface.getDecompressedBitstream(trackno, headno)
+        (sectorMarkers, dataMarkers) = self.getMarkers(decompressedBitstream)
         for sectorStart in sectorMarkers:
             sectordata =""
             crc_data_disk = False
@@ -370,15 +348,14 @@ class SingleIBMTrackSectorParser:
             crc_header_disk = False
             crc_header_calc = False
             crc_check_overall = False
-            add = True
             if len(dataMarkers) <= cnt:
                 pass
                 #print( "No datamarker exists for this sector - " + str(cnt))
             elif dataMarkers[cnt] <= sectorStart:
                 print ("Datamarker is being ignored. " + str( dataMarkers[cnt] ) + " " + str(sectorStart))
             else:
-                sectordata        = self.grabSectorChunkHex( decompressedBitstream, dataMarkers[cnt], self.sectorDataSize)
-                crc_data_disk     = self.grabSectorChunkHex( decompressedBitstream, dataMarkers[cnt] + self.sectorDataSize, 32)
+                sectordata        = self.grabSectorChunkHex( decompressedBitstream, dataMarkers[cnt], self.diskFormat.sectorDataSize)
+                crc_data_disk     = self.grabSectorChunkHex( decompressedBitstream, dataMarkers[cnt] + self.diskFormat.sectorDataSize, 32)
                 crc_data_calc     = self.getCRC( self.diskFormat.sectorDataStartString + sectordata )
                 crc_header_disk   = self.grabSectorChunkHex( decompressedBitstream, sectorStart + 64, 32)
                 crc_header_calc   = self.getCRC( self.diskFormat.sectorStartString + self.grabSectorChunkHex( decompressedBitstream, sectorStart, 64))
@@ -416,19 +393,10 @@ class SingleIBMTrackSectorParser:
             else:
                 print ("CRC check SUCCESSFUL.")
 
-    def mfmDecode( self, stream ):
-        result = ""
-        keep = False;
-        for char in stream:
-            if keep is True:
-                result += char
-            keep = not keep
-        return result
-
-    def getNumberOfFoundSectors(self):
-        if self.readCount == 0:
-            print ("Warning: We did not read yet...")
-        return self.sectorCount
+    def printSerialStats(self):
+        (tdtr,tdtc) = self.ArduinoFloppyControlInterface.getStats()
+        print ( "Total duration track read     : " + tdtr + " seconds")
+        print ( "Total duration serial commands: " + tdtc + " seconds")
 
 class ArduinoFloppyControlInterface:
     '''
@@ -494,7 +462,7 @@ class ArduinoFloppyControlInterface:
         elif cmd == "motor_on":
             self.isRunning = True
             executeCMD = True
-        elif self.isRunning is False and not cmd == "motor_on":
+        elif self.isRunning is False: #and not cmd == "motor_on":
             self.sendCommand("motor_on")
             executeCMD = True
         elif self.isRunning is True:
@@ -572,6 +540,20 @@ class ArduinoFloppyControlInterface:
         if tracklength < 10223:
             print ("Track length suspicously short: " + str(tracklength) + " bytes")
         return trackbytes
+
+    def getDecompressedBitstream(self, track, head):
+        compressedBytes = self.getCompressedTrackData(track, head)
+        table = { 0: "", 1: "01", 2: "001", 3: "0001"}
+        decompressedBitstream = ""
+        #print( "Length of compressed bitstream: "+ str(len(compressedBitstream)) )
+        for byte in compressedBytes:
+            bits=bin(byte)[2:].zfill(8)
+            for chunk in range(0,4):
+                value=int(bits[chunk*2:chunk*2+2])&3
+                if value > 3:
+                    print ("ERROR decompressBitstream illegal value!")
+                decompressedBitstream += table[value]
+        return decompressedBitstream
 
     def getStats(self):
         tdtr = str(int(self.total_duration_trackread*100)/100)
