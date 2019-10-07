@@ -30,6 +30,23 @@ Please call script to display help:
 ```
 $ python3 disk2image.py -h
 ```
+
+Currently the following options are available (none of them are mandatory to use):
+```
+-h, --help            show this help message and exit
+-d DISKTYPE, --disktype=DISKTYPE
+                      type of DD disk in floppy drive: cbm1581 [default],
+                      ibmdos
+-o OUTPUTIMAGE, --output=OUTPUTIMAGE
+                      file path/name of image file to write to, default is
+                      image_cbm1581.d81
+-s SERIALDEVICENAME, --serialdevice=SERIALDEVICENAME
+                      device name of the serial device, for example
+                      /dev/ttyUSB0
+-r RETRIES, --retries=RETRIES
+                      number of retries to read disk track again after
+                      invalid CRC check, default: 5 retries
+```
 ## FAQ
 
 #### I tried to build it and it doesn't work! Who will help?
