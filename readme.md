@@ -57,7 +57,7 @@ With the VC1581 it's a bit of a chicken and egg problem. Commercial software was
 
 Where was I? Ahh... As I didn't own any 3.5" DD floppy disks (except for my HP printer DOS driver disk from 1995 that I found the other day) I recently bought a few boxes of used Amiga disks and then used an ancient PC I discovered in the cellar of my parents. That PC from 2002 included a 3.5" floppy drive. Using Linux, I was able to configure the disk drive in a way that is acknowledged to be feasable to write valid disks for the 1581 disk drive.
 
-To enforce the 1581 format on my Linux OS I used ```fdutils```` and had do the following:
+To enforce the 1581 format on my Linux OS I used ```fdutils``` and had do the following:
 
 ```
 mknod /dev/fd0cbm1581 b 2 124
@@ -65,9 +65,7 @@ setfdprm /dev/fd0cbm1581 DD DS sect=10 cyl=80 swapsides
 floppycontrol /dev/fd0 -A 31,7,8,4,25,28,22,21
 ```
 
-Regarding the parameters, please also compare
-https://github.com/Distrotech/fdutils/blob/master/src/mediaprm
-Quote:
+Information regarding the parameters may also be found inside of the sourcecode of fdutils (in  file [mediaprm](https://github.com/Distrotech/fdutils/blob/master/src/mediaprm)). A quote from there:
 
     #Commodore 1581 (the 3 1/2 drive of the Commodore 128)
     "CBM1581":
