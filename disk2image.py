@@ -56,8 +56,9 @@ class launcher:
             "ibmdos"  : diskFormatDOS
         }
         self.defaultDisktype = 'cbm1581'
-        self.defaultOutputImageName = 'image_' + self.defaultDisktype + '.' + \
-        self.diskFormatTypes[self.defaultDisktype]().imageExtension
+        self.defaultOutputImageName = \
+            'image_' + self.defaultDisktype + '.' + \
+            self.diskFormatTypes[self.defaultDisktype]().imageExtension
         self.defaultRetries = 5
 
         parser = OptionParser("usage: %prog [options] arg")
@@ -116,7 +117,7 @@ class diskFormatDOS(diskFormatRoot):
         self.name                   = 'ibmdos'
         self.sectorStartString      = "a1a1a1fe"
         self.sectorDataStartString  = "a1a1a1fb"
-        self.expectedSectorPerTrack = 9
+        self.expectedSectorsPerTrack = 9
         self.sectorStartStringPrefix = "000000000000"
         self.sectorDataStartStringPrefix = "00"
 
@@ -151,7 +152,7 @@ class diskFormat1581(diskFormatDOS):
     def __init__(self):
         super().__init__()
         self.name                   = 'cbm1581'
-        self.expectedSectorPerTrack = 10
+        self.expectedSectorsPerTrack = 10
         self.swapsides              = True
         self.imageExtension         = 'd81'
 
@@ -163,13 +164,13 @@ class IBMDoubleDensityFloppyDiskImager:
     '''
     def __init__( self, diskFormat, imagename, retries, serialDevice ):
 
-        print ("Selected disk format is " + diskFormat.name + ", we expect " + str(diskFormat.expectedSectorPerTrack) + " sectors per track")
+        print ("Selected disk format is " + diskFormat.name + ", we expect " + str(diskFormat.expectedSectorsPerTrack) + " sectors per track")
         print ("Target image file is: " + imagename)
         print ("Serial device is: " + serialDevice)
 
         image = b''
         trackData = {}
-        trackLength = diskFormat.expectedSectorPerTrack * diskFormat.sectorSize
+        trackLength = diskFormat.expectedSectorsPerTrack * diskFormat.sectorSize
         vldtr = SingleTrackSectorListValidator( retries, diskFormat, serialDevice )
         for trackno in diskFormat.trackRange:
             trackData[ trackno ] = {}
@@ -219,19 +220,19 @@ class SingleTrackSectorListValidator:
                 print ("  Repeat track read - attempt " + str( self.maxRetries - self.retries +1 ) + " of " + str(self.maxRetries) )
             self.addValidSectors( self.trackParser.detectSectors(trackno, headno), trackno, headno )
             vsc = len(self.validSectorData)
-            print (f"Reading track: {trackno:2d}, head: {headno}. Number of valid sectors found: {vsc}/{self.diskFormat.expectedSectorPerTrack}")
-            if vsc == self.diskFormat.expectedSectorPerTrack:
+            print (f"Reading track: {trackno:2d}, head: {headno}. Number of valid sectors found: {vsc}/{self.diskFormat.expectedSectorsPerTrack}")
+            if vsc == self.diskFormat.expectedSectorsPerTrack:
                 self.retries = 0
             else:
                 self.retries = self.retries -1
-        if len(self.validSectorData) == self.diskFormat.expectedSectorPerTrack:
+        if len(self.validSectorData) == self.diskFormat.expectedSectorsPerTrack:
             for sectorno in sorted(self.validSectorData):
                 if not len(self.validSectorData[sectorno]) == self.diskFormat.sectorSize * 2:
                     print("  Invalid sector data length." + str(len(self.validSectorData[sectorno])) )
                 #print ("Adding sector no " + str(sectorno))
                 trackData += unhexlify(self.validSectorData[sectorno])
         elif len(self.validSectorData) == 0:
-            trackData = bytes(chr(0) * self.diskFormat.sectorSize * self.diskFormat.expectedSectorPerTrack ,'utf-8')
+            trackData = bytes(chr(0) * self.diskFormat.sectorSize * self.diskFormat.expectedSectorsPerTrack ,'utf-8')
             #print ("bytes: " + str(len(trackData)))
             print("  Notice: Filled up empty track with zeros.");
         else:
@@ -259,11 +260,23 @@ class SingleTrackSectorListValidator:
             if isSameHead is False:
                 raise Exception( "Error: Wrong head/side number: "+ str(sectorprops["sideno"]) + " Please check that you chose the right disk format (swapsides?)." )
 
-            if isSameTrack is True and self.isValidCRC(sectorprops) is True and not sectorprops["sectorno"] in self.validSectorData:
-                if int(sectorprops["sectorno"]) >= self.minSectorNumber and int(sectorprops["sectorno"]) <= self.diskFormat.expectedSectorPerTrack:
-                    self.validSectorData[ sectorprops["sectorno"] ] = sectorprops["data"]
-                else:
-                    print( "Invalid sector number: minsector maxsector "+ str(sectorprops["sectorno"]) )
+            if not sectorprops["sectorno"] in self.validSectorData:
+                crcCheck = self.isValidCRC(sectorprops)
+                #self.printSectorDebugOutput(sectorprops, crcCheck)
+                if crcCheck is True:
+                    if int(sectorprops["sectorno"]) >= self.minSectorNumber and int(sectorprops["sectorno"]) <= self.diskFormat.expectedSectorsPerTrack:
+                        self.validSectorData[ sectorprops["sectorno"] ] = sectorprops["data"]
+                    else:
+                        raise Exception( "Sector number is out of expected bounds: "+ str(sectorprops["sectorno"]) )
+
+    def printSectorDebugOutput(self, sectorprops, crcCheck):
+        infostring =""
+        for prop in sectorprops:
+            if prop != "data" and prop != "crc_check":
+                infostring += prop + ":" + str(sectorprops[prop]) + ", "
+        infostring += "CRC check "
+        infostring += "FAILED" if crcCheck is False else "SUCCESSFUL"
+        print ("- "+ infostring)
 
 class SingleIBMTrackSectorParser:
     '''
@@ -278,7 +291,6 @@ class SingleIBMTrackSectorParser:
         self.diskFormat = diskFormat
         self.ArduinoFloppyControlInterface = arduinoFloppyControlInterface
         self.sectorDataBitSize = self.diskFormat.sectorSize * 16
-
 
     def mfmDecode( self, stream ):
         result = ""
@@ -366,24 +378,6 @@ class SingleIBMTrackSectorParser:
             "crc_data"     : self.grabSectorChunkHex( dataMarker + self.sectorDataBitSize, 32)
         }
 
-    def printSectorTable( self, sectors ):
-        print ("Sectors detected: " + str(len(sectors)))
-        for sectorprops in sectors:
-            sd = sectorprops["data"];
-            crc = sectorprops["crc_check"];
-            del(sectorprops["data"]);
-            del(sectorprops["crc_check"]);
-
-            infostring =""
-            for prop in sectorprops:
-                infostring += prop + ":" + str(sectorprops[prop]) + ", "
-            print ("- "+ infostring)
-
-            if not crc is True:
-                print ("CRC check FAILED.")
-            else:
-                print ("CRC check SUCCESSFUL.")
-
     def printSerialStats(self):
         (tdtr,tdtc) = self.ArduinoFloppyControlInterface.getStats()
         print ( "Total duration track read     : " + tdtr + " seconds")
@@ -402,8 +396,7 @@ class ArduinoFloppyControlInterface:
     def __init__(self, serialDevice, diskFormat):
         self.serialDevice = serialDevice
         self.trackRange = diskFormat.trackRange
-        self.serialTimeout = 0
-        self.hexzeroByte = bytes(chr(0),'utf-8')
+        self.hexZeroByte = bytes(chr(0),'utf-8')
         self.connectionEstablished = False
         self.isRunning = False
         self.serial = False
@@ -436,11 +429,10 @@ class ArduinoFloppyControlInterface:
             self.serial.close()
 
     def openSerialConnection(self):
-        self.serial = Serial( self.serialDevice, 2000000, timeout=self.serialTimeout)
+        self.serial = Serial( self.serialDevice, 2000000, timeout=None)
         self.connectionEstablished = True
         print ("Connection to microcontroller established via " + self.serialDevice )
         self.serial.reset_input_buffer()
-        self.serial.timeout = None
         self.sendCommand("version")
         self.sendCommand("rewind")
         #print( self.serial.get_settings())
@@ -517,7 +509,7 @@ class ArduinoFloppyControlInterface:
 
         #speedup for Linux where pyserial seems to be very optimized
         if platform.system() == "Linux":
-            trackbytes = self.serial.read_until( self.hexzeroByte , 12200)
+            trackbytes = self.serial.read_until( self.hexZeroByte , 12200)
         else:
             trackbytes = self.serial.read(10380)
             self.serial.timeout = 0
