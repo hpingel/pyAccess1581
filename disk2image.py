@@ -28,9 +28,7 @@
 
 from serial import Serial
 from bitstring import BitArray
-import sys, re, time, platform, hashlib, os
-import crcmod.predefined
-from binascii import unhexlify
+import sys, re, time, platform, hashlib, os, binascii
 from optparse import OptionParser
 
 def main():
@@ -230,7 +228,7 @@ class SingleTrackSectorListValidator:
                 if not len(self.validSectorData[sectorno]) == self.diskFormat.sectorSize * 2:
                     print("  Invalid sector data length." + str(len(self.validSectorData[sectorno])) )
                 #print ("Adding sector no " + str(sectorno))
-                trackData += unhexlify(self.validSectorData[sectorno])
+                trackData += binascii.unhexlify(self.validSectorData[sectorno])
         elif len(self.validSectorData) == 0:
             trackData = bytes(chr(0) * self.diskFormat.sectorSize * self.diskFormat.expectedSectorsPerTrack ,'utf-8')
             #print ("bytes: " + str(len(trackData)))
@@ -240,10 +238,13 @@ class SingleTrackSectorListValidator:
         return trackData
 
     def getCRC(self, data):
-        datastring = unhexlify(data)
-        #TODO: try to use  binascii.crc_hqx(data, value) instead
-        xmodem_crc_func = crcmod.predefined.mkCrcFun('crc-ccitt-false')
-        result = hex(xmodem_crc_func( datastring ))[2:].zfill(4)
+        datastring = binascii.unhexlify(data)
+        #we can either use binascii.crc_hqx(data, value) or crcmod
+        #where we have to import crcmod.predefined and install another module via pip
+        #xmodem_crc_func = crcmod.predefined.mkCrcFun('crc-ccitt-false')
+        #crc_int = xmodem_crc_func( datastring )
+        crc_int = result2 = binascii.crc_hqx(datastring, 0xffff)
+        result = hex(crc_int)[2:].zfill(4)
         return result
 
     def isValidCRC(self, sectorprops):
