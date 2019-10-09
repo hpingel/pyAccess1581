@@ -191,11 +191,9 @@ class IBMDoubleDensityFloppyDiskImager:
 
 class SingleTrackSectorListValidator:
     '''
-    asks track reader to read a specific track (trackno) from disk gets
-    structured data of all found sectors of one track validated crc values and
-    manages retry createTrackDataFromSectors
-    returns status information about a track
-    -how many valid sectors could be obtained
+    asks track reader to read a specific track from disk (processTrack). gets
+    structured data of all found sectors of one track. validates crc values and
+    manages optional read retries.
     '''
     def __init__(self, retries, diskFormat, serialDevice):
         self.maxRetries = retries
@@ -238,14 +236,15 @@ class SingleTrackSectorListValidator:
         return trackData
 
     def getCRC(self, data):
-        datastring = binascii.unhexlify(data)
-        #we can either use binascii.crc_hqx(data, value) or crcmod
-        #where we have to import crcmod.predefined and install another module via pip
-        #xmodem_crc_func = crcmod.predefined.mkCrcFun('crc-ccitt-false')
-        #crc_int = xmodem_crc_func( datastring )
-        crc_int = result2 = binascii.crc_hqx(datastring, 0xffff)
-        result = hex(crc_int)[2:].zfill(4)
-        return result
+        '''
+        to calculate crc, we can either use binascii.crc_hqx(data, value) or crcmod
+        where we have to import crcmod.predefined and install another module via pip
+
+        the following code works fine with crcmod:
+        xmodem_crc_func = crcmod.predefined.mkCrcFun('crc-ccitt-false')
+        return hex(xmodem_crc_func( binascii.unhexlify(data)))[2:].zfill(4)
+        '''
+        return hex(binascii.crc_hqx(binascii.unhexlify(data), 0xffff))[2:].zfill(4)
 
     def isValidCRC(self, sectorprops):
         crc_data_check   = sectorprops["crc_data"] == self.getCRC( self.diskFormat.sectorDataStartString + sectorprops["data"] )
@@ -282,11 +281,8 @@ class SingleTrackSectorListValidator:
 class SingleIBMTrackSectorParser:
     '''
     reads the requested track from the disk parses the data into complete
-    sectors discards incomplete sectors and returns data structure with all
-    complete sectors of the track without doing crc validation because we call
-    it in IBM parser. We can use it for Commodore 1581 DD disks (800 KB) or also
-    for standard IBM PC DD disks (720 KB), the only difference is the number of
-    sectors (1581=10 sectors, PC = 9 sectors)
+    sectors. discards incomplete sectors and returns data structure with all
+    complete sectors of the track without doing crc validation yet.
     '''
     def __init__(self, diskFormat, arduinoFloppyControlInterface):
         self.diskFormat = diskFormat

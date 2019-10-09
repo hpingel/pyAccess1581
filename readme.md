@@ -12,7 +12,7 @@ Python code written by Henning Pingel, reusing hardware interface of ["Arduino A
 
 To run this tool on your PC/Notebook you need to have Python3 language installed. I personally tested it with Python 3.6.x and 3.7.x on Linux and Windows 10. It might run on MacOS (untested).
 
-You need to install a number of Python modules: pyserial, crcmod, bitstring...
+You need to install a number of Python modules: pyserial, bitstring...
 
 ## Hardware and Arduino firmware requirements
 
