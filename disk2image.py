@@ -28,7 +28,7 @@
 
 from serial import Serial
 from bitstring import BitArray
-import sys, re, time, platform, hashlib, os, binascii
+import sys, re, time, platform, hashlib, os, binascii, ast
 from optparse import OptionParser
 
 def main():
@@ -72,7 +72,7 @@ class launcher:
         )
         parser.add_option("-s", "--serialdevice",
             dest="serialDeviceName",
-            help="device name of the serial device, for example /dev/ttyUSB0",
+            help="device name of the serial device, for example /dev/ttyUSB0 (use value 'simulated' to test functionality)",
             default=self.serialDeviceAddresses[ platform.system() ]
         )
         parser.add_option("-r", "--retries", dest="retries",
@@ -82,13 +82,14 @@ class launcher:
         )
         (options, args) = parser.parse_args()
 
-        if platform.system() != "Windows" and not os.path.exists(options.serialDeviceName):
+        if options.serialDeviceName != "simulated" and platform.system() != "Windows" and not os.path.exists(options.serialDeviceName):
             raise Exception( "Serial device does not exist: " + options.serialDeviceName )
 
         if not options.disktype in self.diskFormatTypes.keys():
             raise Exception("Error: disk format " + options.disktype +  " is unknown")
         diskFormat = self.diskFormatTypes[ options.disktype ]()
-        IBMDoubleDensityFloppyDiskImager( diskFormat, options.outputImage, options.retries, options.serialDeviceName )
+        options.storeBitstream = False #tmp debug
+        IBMDoubleDensityFloppyDiskImager( diskFormat, options.outputImage, options.retries, options.serialDeviceName, options.storeBitstream )
 
     def getDocDiskType(self):
         dft = ''
@@ -160,7 +161,7 @@ class IBMDoubleDensityFloppyDiskImager:
     and collects all the sector data of all tracks
     to store it into an image file
     '''
-    def __init__( self, diskFormat, imagename, retries, serialDevice ):
+    def __init__( self, diskFormat, imagename, retries, serialDevice, storeBitstream = False ):
 
         print ("Selected disk format is " + diskFormat.name + ", we expect " + str(diskFormat.expectedSectorsPerTrack) + " sectors per track")
         print ("Target image file is: " + imagename)
@@ -168,16 +169,20 @@ class IBMDoubleDensityFloppyDiskImager:
 
         image = b''
         trackData = {}
+        rawTracks = {}
         trackLength = diskFormat.expectedSectorsPerTrack * diskFormat.sectorSize
-        vldtr = SingleTrackSectorListValidator( retries, diskFormat, serialDevice )
+        vldtr = SingleTrackSectorListValidator( retries, diskFormat, serialDevice, storeBitstream )
         for trackno in diskFormat.trackRange:
             trackData[ trackno ] = {}
+            rawTracks[ trackno ] = {}
             for headno in diskFormat.headRange:
                 trackDataTmp = vldtr.processTrack( trackno, headno )
                 if not len(trackDataTmp) == trackLength:
                     print ("ERROR track should have " + str(trackLength) + " bytes but has " + str(len(trackData)))
                 trackData[ trackno ][ headno ] = trackDataTmp
                 image += trackData[ trackno ][ headno ]
+                if storeBitstream is True:
+                    rawTracks[trackno][headno] = vldtr.getDecompressedBitstream()
         print ("Writing image to file " + imagename)
         with open(imagename, 'wb') as f:
             f.write( image)
@@ -187,6 +192,10 @@ class IBMDoubleDensityFloppyDiskImager:
         print("SHA1  : " + result.hexdigest())
         result = hashlib.sha256(image)
         print("SHA256: " + result.hexdigest())
+
+        if storeBitstream is True:
+            with open('raw_debug_image_d81.py', "w") as f:
+                f.write(repr(rawTracks))
         vldtr.printSerialStats()
 
 class SingleTrackSectorListValidator:
@@ -195,14 +204,19 @@ class SingleTrackSectorListValidator:
     structured data of all found sectors of one track. validates crc values and
     manages optional read retries.
     '''
-    def __init__(self, retries, diskFormat, serialDevice):
+    def __init__(self, retries, diskFormat, serialDevice, storeBitstream = False):
         self.maxRetries = retries
         self.diskFormat = diskFormat
         self.minSectorNumber = 1
         self.validSectorData = {}
-        self.ArduinoFloppyControlInterface = ArduinoFloppyControlInterface(serialDevice, diskFormat)
-        self.trackParser = SingleIBMTrackSectorParser(self.diskFormat, self.ArduinoFloppyControlInterface)
-        self.ArduinoFloppyControlInterface.openSerialConnection()
+        self.storeBitstream = storeBitstream
+        self.decompressedBitstream = ""
+        if serialDevice == "simulated":
+            self.arduino = ArduinoSimulator(diskFormat)
+        else:
+            self.arduino = ArduinoFloppyControlInterface(serialDevice, diskFormat)
+        self.trackParser = SingleIBMTrackSectorParser(self.diskFormat, self.arduino)
+        self.arduino.openSerialConnection()
 
     def printSerialStats(self):
         self.trackParser.printSerialStats()
@@ -215,6 +229,8 @@ class SingleTrackSectorListValidator:
             if self.retries < self.maxRetries:
                 print ("  Repeat track read - attempt " + str( self.maxRetries - self.retries +1 ) + " of " + str(self.maxRetries) )
             self.addValidSectors( self.trackParser.detectSectors(trackno, headno), trackno, headno )
+            if self.storeBitstream is True:
+                self.decompressedBitstream = self.trackParser.getDecompressedBitstream()
             vsc = len(self.validSectorData)
             print (f"Reading track: {trackno:2d}, head: {headno}. Number of valid sectors found: {vsc}/{self.diskFormat.expectedSectorsPerTrack}")
             if vsc == self.diskFormat.expectedSectorsPerTrack:
@@ -234,6 +250,9 @@ class SingleTrackSectorListValidator:
         else:
             print("  Not enough sectors found.");
         return trackData
+
+    def getDecompressedBitstream(self):
+        return self.decompressedBitstream
 
     def getCRC(self, data):
         '''
@@ -286,10 +305,31 @@ class SingleIBMTrackSectorParser:
     '''
     def __init__(self, diskFormat, arduinoFloppyControlInterface):
         self.diskFormat = diskFormat
-        self.ArduinoFloppyControlInterface = arduinoFloppyControlInterface
+        self.arduino = arduinoFloppyControlInterface
         self.sectorDataBitSize = self.diskFormat.sectorSize * 16
+        self.decompressedBitstream = ""
 
-    def mfmDecode( self, stream ):
+    def detectSectors(self, trackno, headno):
+        cnt = 0
+        sectors = []
+        if self.diskFormat.swapsides is False:
+            headno = 1 if headno == 0 else 0
+        self.decompressedBitstream = self.arduino.getDecompressedBitstream(trackno, headno)
+        (sectorMarkers, dataMarkers) = self.getMarkers()
+        for sectorStart in sectorMarkers:
+            if len(dataMarkers) <= cnt:
+                pass
+            elif dataMarkers[cnt] <= sectorStart:
+                print ("Datamarker is being ignored. " + str( dataMarkers[cnt] ) + " " + str(sectorStart))
+            else:
+                sectors.append(self.parseSingleSector(sectorStart, dataMarkers[cnt]))
+            cnt += 1
+        return sectors
+
+    def getDecompressedBitstream(self):
+        return self.decompressedBitstream
+
+    def mfmDecode(self, stream):
         result = ""
         keep = False;
         for char in stream:
@@ -315,16 +355,16 @@ class SingleIBMTrackSectorParser:
         dataMarkers = []
         dataMarkersTmp = []
         rawSectors = re.split( self.diskFormat.sectorStartMarker, self.decompressedBitstream)
-        del rawSectors[-1]
+        del rawSectors[-1] #delete last entry
         previousBits = 0
         for rawSector in rawSectors:
             previousBits += len( rawSector ) + self.diskFormat.sectorStartMarkerLength
             sectorMarkers.append( previousBits )
         dataMarkerMatchesIterator = re.finditer( self.diskFormat.sectorDataStartMarker, self.decompressedBitstream)
         for dataMarker in dataMarkerMatchesIterator:
-            (from1, to1) = (dataMarker.span() )
-            if to1 >= sectorMarkers[0] + self.diskFormat.legalOffsetRangeLowerBorder:
-                dataMarkersTmp.append(to1)
+            (startPosDataMarker, endPosDataMarker) = (dataMarker.span() )
+            if endPosDataMarker >= sectorMarkers[0] + self.diskFormat.legalOffsetRangeLowerBorder:
+                dataMarkersTmp.append(endPosDataMarker)
             else:
                 print("Ignoring datamarker - is in front of first sector marker")
         cnt = 0
@@ -334,7 +374,7 @@ class SingleIBMTrackSectorParser:
                 print ("getMarkers / Unusual offset found: "+str(offset))
             #now we check if the sector's data might be cut off at the end
             #of the chunk of the track we have, the added 32 represents
-            #the CRC checksum of the sector data
+            #the length of the CRC checksum of the sector data
             overshoot = dataMarker + self.sectorDataBitSize + 32
             if overshoot <= len( self.decompressedBitstream ):
                 dataMarkers.append( dataMarker )
@@ -343,23 +383,6 @@ class SingleIBMTrackSectorParser:
                 #print("Removing sector marker because it overshot the bitstream")
                 sectorMarkers.remove(sectorMarkers[cnt])
         return (sectorMarkers, dataMarkers)
-
-    def detectSectors(self, trackno, headno):
-        cnt = 0
-        sectors = []
-        if self.diskFormat.swapsides is False:
-            headno = 1 if headno == 0 else 0
-        self.decompressedBitstream = self.ArduinoFloppyControlInterface.getDecompressedBitstream(trackno, headno)
-        (sectorMarkers, dataMarkers) = self.getMarkers()
-        for sectorStart in sectorMarkers:
-            if len(dataMarkers) <= cnt:
-                pass
-            elif dataMarkers[cnt] <= sectorStart:
-                print ("Datamarker is being ignored. " + str( dataMarkers[cnt] ) + " " + str(sectorStart))
-            else:
-                sectors.append(self.parseSingleSector(sectorStart, dataMarkers[cnt]))
-            cnt += 1
-        return sectors
 
     def parseSingleSector(self, sectorStart, dataMarker):
         dataMarker = dataMarker - sectorStart
@@ -376,7 +399,7 @@ class SingleIBMTrackSectorParser:
         }
 
     def printSerialStats(self):
-        (tdtr,tdtc) = self.ArduinoFloppyControlInterface.getStats()
+        (tdtr,tdtc) = self.arduino.getStats()
         print ( "Total duration track read     : " + tdtr + " seconds")
         print ( "Total duration serial commands: " + tdtc + " seconds")
 
@@ -539,6 +562,26 @@ class ArduinoFloppyControlInterface:
         tdtr = str(int(self.total_duration_trackread*100)/100)
         tdtc = str(int(self.total_duration_cmds*100)/100)
         return (tdtr, tdtc)
+
+class ArduinoSimulator(ArduinoFloppyControlInterface):
+
+    def __init__(self, diskFormat):
+        super().__init__("bla", diskFormat)
+        with open('raw_debug_image_d81.py', 'r') as f: self.rawTrackData = ast.literal_eval(f.read())
+
+    def __del__(self):
+        pass
+
+    def openSerialConnection(self):
+        pass
+
+    def connectionIsUsable(self, cmd):
+        return True
+
+    def getDecompressedBitstream(self, track, head):
+        if head == 0:
+            time.sleep(1)
+        return self.rawTrackData[track][head]
 
 if __name__ == '__main__':
     main()
