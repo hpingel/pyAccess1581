@@ -21,11 +21,11 @@ Hardware and Arduino firmware requirements
 
 This tool only works in conjunction with a specific hardware interface that bridges the gap between an ordinary modern PC/Notebook and a vintage 3.5" PC floppy drive. The hardware interface is based on an 16Mhz Arduino running a specific firmware. The modern PC communicates with the Arduino via a serial connection over a USB cable. A FTDI USB adapter is used for this USB tunnelling task. The Arduino communicates with the floppy drive using its GPIO pins.
 
-This mandatory hardware interface and the firmware for the Arduino were already designed long before this Python based project came into existence: They were actually engineered for another open source project created by Robert Smith in 2017 and 2018: The ["Arduino Amiga Floppy Disk Reader/Writer"](http://amiga.robsmithdev.co.uk/). At this time, pyAccess1581 is simply reusing the set of commands that Robert has created to control the floppy drive via a serial connection.
+This mandatory hardware interface and the firmware for the Arduino were already designed long before this Python based project came into existence: They were actually engineered for another open source project created by Robert Smith in 2017 and 2018: The `"Arduino Amiga Floppy Disk Reader/Writer" <http://amiga.robsmithdev.co.uk/`_. At this time, pyAccess1581 is simply reusing the set of commands that Robert has created to control the floppy drive via a serial connection.
 
 The Arduino Pro Mini 16Mhz 5V that is recommended by Robert is running an ATmega 328. I was also able to make Robert's firmware run on an Arduino Pro Micro running an ATmega 32U4 - with modifications. The additional FTDI adapter is needed anyway.
 
-For further information on the Amiga floppy reader/writer hardware please check `Robert's instructions <http://amiga.robsmithdev.co.uk/instructions>`_. You can find the source code of Robert's project `here<https://github.com/RobSmithDev/ArduinoFloppyDiskReader>`_ (including the firmware to be flashed on to the Arduino Pro Mini):
+For further information on the Amiga floppy reader/writer hardware please check `Robert's instructions <http://amiga.robsmithdev.co.uk/instructions>`_. You can find the source code of Robert's project `here <https://github.com/RobSmithDev/ArduinoFloppyDiskReader>`_ (including the firmware to be flashed on to the Arduino Pro Mini):
 
 Usage
 -----
@@ -120,7 +120,7 @@ This little Python project started off as a proof of concept that the same hardw
 Can High Density (HD) floppy disks like FD2000 disks for Commodore computers be supported in the future?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-I guess that it would make sense to do this with a different microcontroller that is faster than 16 Mhz. It looks like Fluxengine can be used for that already: Please have a look at [my little report about this format](https://github.com/davidgiven/fluxengine/issues/107)
+I guess that it would make sense to do this with a different microcontroller that is faster than 16 Mhz. It looks like Fluxengine can be used for that already: Please have a look at `my little report about this format <https://github.com/davidgiven/fluxengine/issues/107>`_
 
 Credits
 -------
