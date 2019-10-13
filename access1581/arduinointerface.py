@@ -26,6 +26,7 @@
 
 '''
 
+import time, platform
 from serial import Serial
 
 class ArduinoFloppyControlInterface:
@@ -44,6 +45,7 @@ class ArduinoFloppyControlInterface:
         self.hexZeroByte = bytes(chr(0),'utf-8')
         self.decompressMap = { 0: "", 1: "01", 2: "001", 3: "0001"}
         self.connectionEstablished = False
+        self.ignoreIndexHole = True
         self.isRunning = False
         self.serial = False
         self.currentTrack = 100
@@ -74,6 +76,9 @@ class ArduinoFloppyControlInterface:
             self.sendCommand("motor_off")
             self.isRunning = False
             self.serial.close()
+
+    def setIgnoreIndexHole( b ):
+        self.ignoreIndexHole = b
 
     def openSerialConnection(self):
         self.serial = Serial( self.serialDevice, 2000000, timeout=None)
@@ -153,8 +158,10 @@ class ArduinoFloppyControlInterface:
     def getCompressedTrackData(self, track, head):
         self.selectTrackAndHead(track, head)
         starttime_trackread = time.time()
-        #self.serial.write(self.cmd["read_track_from_index_hole"][0])
-        self.serial.write(self.cmd["read_track_ignoring_index_hole"][0])
+        if self.ignoreIndexHole is True:
+            self.serial.write(self.cmd["read_track_ignoring_index_hole"][0])
+        else:
+            self.serial.write(self.cmd["read_track_from_index_hole"][0])
         #speedup for Linux where pyserial seems to be very optimized
         if platform.system() == "Linux":
             trackbytes = self.serial.read_until( self.hexZeroByte , 12200)
@@ -207,9 +214,9 @@ class ArduinoFloppyControlInterface:
 
 class ArduinoSimulator(ArduinoFloppyControlInterface):
 
-    def __init__(self, diskFormat):
+    def __init__(self, diskFormat, rawTrackData):
         super().__init__("bla", diskFormat)
-        with open('raw_debug_image_d81.py', 'r') as f: self.rawTrackData = ast.literal_eval(f.read())
+        self.rawTrackData = rawTrackData
 
     def __del__(self):
         pass
