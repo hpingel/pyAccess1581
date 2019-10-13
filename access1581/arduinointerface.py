@@ -112,31 +112,20 @@ class ArduinoFloppyControlInterface:
             starttime_serialcmd = time.time()
             #print ("...Processing cmd " + cmdname)
             self.serial.reset_input_buffer()
-            maxRetries = 1
-            retries = maxRetries
-            while retries > 0:
-                self.serial.write( cmd + param)
-                reply = self.serial.read(1)
-                if cmdname == "version":
-                    firmware = self.serial.read(4)
-                    print ("Firmware version on Arduino: " + str(firmware))
-                duration_serialcmd = int((time.time() - starttime_serialcmd)*1000)/1000
-                self.total_duration_cmds += duration_serialcmd
-                if param != b'':
-                    label2 = label + " " + str(param)
-                else:
-                    label2 = label
+            self.serial.write( cmd + param)
+            reply = self.serial.read(1)
+            if cmdname == "version":
+                firmware = self.serial.read(4)
+                print ("Firmware version on Arduino: " + str(firmware))
+            duration_serialcmd = int((time.time() - starttime_serialcmd)*1000)/1000
+            self.total_duration_cmds += duration_serialcmd
+            if param != b'':
+                label2 = label + " " + str(param)
+            else:
+                label2 = label
 #                print  ("    Serial cmd duration:                            " + str(duration_serialcmd) + " seconds " + label2)
-                if not reply == b'1':
-                    retries = retries - 1
-                    if retries == 0:
-                        retries=0
-                        raise Exception ( label2 + ": Something went wrong! Reply was " + str(reply))
-                    else:
-                        print ( "Retrying: " + label2 + ": Reply was " + str(reply))
-                else:
-                    retries = 0 #success
-                    #print( "   " + label + ": OK")
+            if not reply == b'1' or ( reply == b'Y' and cmdname == "write_track"):
+                raise Exception ( label2 + ": Something went wrong! Reply was " + str(reply))
         else:
             raise Exception ( label + ": Connection was not usable!")
 
@@ -154,6 +143,24 @@ class ArduinoFloppyControlInterface:
                 self.currentHead = head
             else:
                 print ('ERROR: Head should be 0 or 1!')
+
+    def writeTrackData(self, track, head, data):
+        datalen = len(data)
+        if datalen > 65535:
+            raise Exception ( "track data to write is far too long!")
+        datalen_hb = int(datalen / 255)
+        datalen_lb = datalen - (255 * datalen_hb)
+        print (f"Datalen: {datalen}, {datalen_hb}, {datalen_lb}")
+        starttime_trackwrite = time.time()
+        self.sendCommand("enable_write")
+        self.sendCommand("write_track")
+        self.selectTrackAndHead(track, head)
+        #send data length high byte
+        self.serial.write( bytes( chr(datalen_hb),'utf-8' ))
+        #send data length low byte
+        self.serial.write( bytes( chr(datalen_lb),'utf-8' ))
+        reply = self.serial.read(1)
+
 
     def getCompressedTrackData(self, track, head):
         self.selectTrackAndHead(track, head)
