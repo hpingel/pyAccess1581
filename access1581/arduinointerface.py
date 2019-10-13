@@ -45,7 +45,7 @@ class ArduinoFloppyControlInterface:
         self.hexZeroByte = bytes(chr(0),'utf-8')
         self.decompressMap = { 0: "", 1: "01", 2: "001", 3: "0001"}
         self.connectionEstablished = False
-        self.ignoreIndexHole = True
+        self.ignoreIndexPulse = True
         self.isRunning = False
         self.serial = False
         self.currentTrack = 100
@@ -62,8 +62,8 @@ class ArduinoFloppyControlInterface:
             "head1"       : ( b']', "Selecting head 1"),
             "select_track": ( b'#', "Selecting track"), # not complete command without track number
             "read_track"  : ( b'<', "Reading track"),
-            "read_track_from_index_hole" : ( b'<1', "Reading track from index hole"),  # combined command
-            "read_track_ignoring_index_hole" : ( b'<0', "Instantly reading track"),  # combined command
+            "read_track_from_index_pulse" : ( bytes( '<' + chr(1),'utf-8'), "Reading track from index pulse"),  # combined command
+            "read_track_ignoring_index_pulse" : ( bytes( '<' + chr(0),'utf-8'), "Instantly reading track"),  # combined command
             "write_track" : ( b'>', "Writing track"),
             "enable_write": ( b'~', "Enable writing"),
             "erase_track" : ( b'X', "Erasing track"),
@@ -77,8 +77,8 @@ class ArduinoFloppyControlInterface:
             self.isRunning = False
             self.serial.close()
 
-    def setIgnoreIndexHole( b ):
-        self.ignoreIndexHole = b
+    def setIgnoreIndexPulse( b ):
+        self.ignoreIndexPulse = b
 
     def openSerialConnection(self):
         self.serial = Serial( self.serialDevice, 2000000, timeout=None)
@@ -158,10 +158,10 @@ class ArduinoFloppyControlInterface:
     def getCompressedTrackData(self, track, head):
         self.selectTrackAndHead(track, head)
         starttime_trackread = time.time()
-        if self.ignoreIndexHole is True:
-            self.serial.write(self.cmd["read_track_ignoring_index_hole"][0])
+        if self.ignoreIndexPulse is True:
+            self.serial.write(self.cmd["read_track_ignoring_index_pulse"][0])
         else:
-            self.serial.write(self.cmd["read_track_from_index_hole"][0])
+            self.serial.write(self.cmd["read_track_from_index_pulse"][0])
         #speedup for Linux where pyserial seems to be very optimized
         if platform.system() == "Linux":
             trackbytes = self.serial.read_until( self.hexZeroByte , 12200)
