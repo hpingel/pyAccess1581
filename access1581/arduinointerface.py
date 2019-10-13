@@ -124,7 +124,9 @@ class ArduinoFloppyControlInterface:
             else:
                 label2 = label
 #                print  ("    Serial cmd duration:                            " + str(duration_serialcmd) + " seconds " + label2)
-            if not reply == b'1' or ( reply == b'Y' and cmdname == "write_track"):
+            #if (cmdname == "write_track"):
+            #    print ("Write track cmd: reply: " + str(reply))
+            if not reply == b'1': # or ( reply == b'Y' and cmdname == "write_track"):
                 raise Exception ( label2 + ": Something went wrong! Reply was " + str(reply))
         else:
             raise Exception ( label + ": Connection was not usable!")
@@ -152,14 +154,25 @@ class ArduinoFloppyControlInterface:
         datalen_lb = datalen - (255 * datalen_hb)
         print (f"Datalen: {datalen}, {datalen_hb}, {datalen_lb}")
         starttime_trackwrite = time.time()
+        self.selectTrackAndHead(track, head)
         self.sendCommand("enable_write")
         self.sendCommand("write_track")
-        self.selectTrackAndHead(track, head)
+        reply = self.serial.read(1)
+        print ("Reply after write track :" + str(reply))
         #send data length high byte
         self.serial.write( bytes( chr(datalen_hb),'utf-8' ))
         #send data length low byte
         self.serial.write( bytes( chr(datalen_lb),'utf-8' ))
+        #index pulse setting 1= WRITE FROM INDEX PULSE
+        self.serial.write( bytes( chr(1),'utf-8' ))
         reply = self.serial.read(1)
+        print ("Reply pulse setting :" + str(reply))
+        if reply == b'!':
+            raise Exception("Track write stopped " + str(reply))
+        self.serial.write( bytes( data,'utf-8' ))
+        reply = self.serial.read(1)
+        if reply != b'1':
+            raise Exception("Track write failed " + str(reply))
 
 
     def getCompressedTrackData(self, track, head):
