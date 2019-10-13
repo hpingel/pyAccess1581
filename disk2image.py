@@ -161,7 +161,7 @@ class IBMDoubleDensityFloppyDiskImager:
     to store it into an image file
     '''
     def __init__( self, diskFormat, imagename, retries, serialDevice, storeBitstream = False ):
-
+        print ("pyAccess1581  Copyright (C) 2019  Henning Pingel")
         print ("Selected disk format is " + diskFormat.name + ", we expect " + str(diskFormat.expectedSectorsPerTrack) + " sectors per track")
         print ("Target image file is: " + imagename)
         print ("Serial device is: " + serialDevice)
