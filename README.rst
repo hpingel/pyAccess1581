@@ -7,7 +7,7 @@ pyAccess1581 can create disk images of specific double density (DD) floppy disks
 
 Warning: This software is in a highly experimental alpha state - potentially full of bugs and surprises. Don't use it with the intention to create reliable backups of your data. Always write-protect your floppy disks before using it with this tool!
 
-Python code written by Henning Pingel, reusing hardware interface of ["Arduino Amiga Floppy Disk Reader/Writer"](http://amiga.robsmithdev.co.uk/) by Robert Smith
+Python code written by Henning Pingel, reusing hardware interface of `"Arduino Amiga Floppy Disk Reader/Writer"<http://amiga.robsmithdev.co.uk/>`_ by Robert Smith
 
 Software requirements
 ---------------------
@@ -25,7 +25,7 @@ This mandatory hardware interface and the firmware for the Arduino were already 
 
 The Arduino Pro Mini 16Mhz 5V that is recommended by Robert is running an ATmega 328. I was also able to make Robert's firmware run on an Arduino Pro Micro running an ATmega 32U4 - with modifications. The additional FTDI adapter is needed anyway.
 
-For further information on the Amiga floppy reader/writer hardware please check [Robert's instructions](http://amiga.robsmithdev.co.uk/instructions). You can find the source code of Robert's project [here](https://github.com/RobSmithDev/ArduinoFloppyDiskReader) (including the firmware to be flashed on to the Arduino Pro Mini):
+For further information on the Amiga floppy reader/writer hardware please check `Robert's instructions<http://amiga.robsmithdev.co.uk/instructions>`_. You can find the source code of Robert's project `here<https://github.com/RobSmithDev/ArduinoFloppyDiskReader>`_ (including the firmware to be flashed on to the Arduino Pro Mini):
 
 Usage
 -----
@@ -61,7 +61,7 @@ First of all, you need to own double density disks to test the reader. Ideally y
 Are there any other projects that do the same stuff?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Yes, have a look at the very promising project [Fluxengine](http://cowlark.com/fluxengine/index.html).
+Yes, have a look at the very promising project `Fluxengine<http://cowlark.com/fluxengine/index.html>`_.
 
 Is this a finished project?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -110,7 +110,7 @@ Does this project only run on specific Arduinos? Why is that the best possible h
 
 While Robert has chosen an Atmega328 based Arduino Pro Mini (16Mhz, 5V), I can offer the alternative to use an Atmega32U4 based Arduino Pro Micro (16Mhz, 5V) instead. I have ported his sketch to the Pro Micro (haven't published this sourcecode yet). But the Pro Mini seems to be slightly cheaper anyway.
 
-While learning more about micro controllers in 2019 and looking at other projects like [Fluxengine](http://cowlark.com/fluxengine/index.html) or [ADF-Copy](https://nickslabor.niteto.de/projekte/adf-copy/) I guess there is a big choice of microcontrollers that could do the job. Robert Smith has chosen a conveniently low-cost microcontroller that only runs on 16Mhz with a tiny bit of RAM and he was able to prove that it still can be a valid interface running just fast enough to do the proper job of reading and writing DD disks.
+While learning more about micro controllers in 2019 and looking at other projects like `Fluxengine<http://cowlark.com/fluxengine/index.html>`_ or `ADF-Copy<https://nickslabor.niteto.de/projekte/adf-copy/>`_ I guess there is a big choice of microcontrollers that could do the job. Robert Smith has chosen a conveniently low-cost microcontroller that only runs on 16Mhz with a tiny bit of RAM and he was able to prove that it still can be a valid interface running just fast enough to do the proper job of reading and writing DD disks.
 
 Why did you start this Python based project? Especially as a project like Fluxengine can do the same?
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
