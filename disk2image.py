@@ -27,8 +27,7 @@
 '''
 
 from serial import Serial
-from bitstring import BitArray
-import sys, re, time, platform, hashlib, os, binascii, ast
+import sys, re, time, platform, hashlib, os, binascii, ast, bitstring
 from optparse import OptionParser
 
 def main():
@@ -36,7 +35,7 @@ def main():
         starttime = time.time()
         launcher()
         duration = int((time.time() - starttime)*100)/100
-        print  ("Estimated total duration     : " + str(duration) + " seconds")
+        print  ("Estimated total duration            : " + str(duration) + " seconds")
     except:
         print("Unexpected error:", sys.exc_info()[0])
         raise
@@ -341,7 +340,7 @@ class SingleIBMTrackSectorParser:
     def convertBitstreamBytes( self, data, flagHexInt ):
         if data is "":
             return ""
-        ba = BitArray('0b'+data )
+        ba = bitstring.BitArray('0b'+data )
         return ba.hex if flagHexInt is True else ba.int
 
     def grabSectorChunkHex( self, start, length):
@@ -399,9 +398,10 @@ class SingleIBMTrackSectorParser:
         }
 
     def printSerialStats(self):
-        (tdtr,tdtc) = self.arduino.getStats()
-        print ( "Total duration track read     : " + tdtr + " seconds")
-        print ( "Total duration serial commands: " + tdtc + " seconds")
+        (tdtr,tdtc,tdtd) = self.arduino.getStats()
+        print ( "Total duration of all track reads   : " + tdtr + " seconds")
+        print ( "Total duration other serial commands: " + tdtc + " seconds")
+        print ( "Total duration of all decompressions: " + tdtd + " seconds")
 
 class ArduinoFloppyControlInterface:
     '''
@@ -417,6 +417,7 @@ class ArduinoFloppyControlInterface:
         self.serialDevice = serialDevice
         self.trackRange = diskFormat.trackRange
         self.hexZeroByte = bytes(chr(0),'utf-8')
+        self.decompressMap = { 0: "", 1: "01", 2: "001", 3: "0001"}
         self.connectionEstablished = False
         self.isRunning = False
         self.serial = False
@@ -424,6 +425,7 @@ class ArduinoFloppyControlInterface:
         self.currentHead = 2
         self.total_duration_trackread = 0
         self.total_duration_cmds = 0
+        self.total_duration_decompress = 0
         self.cmd = {
             "version"     : ( b'?', "Detecting firmware version" ),
             "motor_on"    : ( b'+', "Switching motor on" ),
@@ -495,7 +497,6 @@ class ArduinoFloppyControlInterface:
                 else:
                     label2 = label
 #                print  ("    Serial cmd duration:                            " + str(duration_serialcmd) + " seconds " + label2)
-
                 if not reply == b'1':
                     retries = retries - 1
                     if retries == 0:
@@ -509,7 +510,7 @@ class ArduinoFloppyControlInterface:
         else:
             raise Exception ( label + ": Connection was not usable!")
 
-    def getCompressedTrackData(self, track, head):
+    def selectTrackAndHead(self, track, head):
         if self.currentTrack != track:
             if not track in self.trackRange:
                 raise Exception("Error: Track is not in range")
@@ -523,10 +524,12 @@ class ArduinoFloppyControlInterface:
                 self.currentHead = head
             else:
                 print ('ERROR: Head should be 0 or 1!')
+
+    def getCompressedTrackData(self, track, head):
+        self.selectTrackAndHead(track, head)
         starttime_trackread = time.time()
         #self.serial.write(self.cmd["read_track_from_index_hole"][0])
         self.serial.write(self.cmd["read_track_ignoring_index_hole"][0])
-
         #speedup for Linux where pyserial seems to be very optimized
         if platform.system() == "Linux":
             trackbytes = self.serial.read_until( self.hexZeroByte , 12200)
@@ -535,7 +538,6 @@ class ArduinoFloppyControlInterface:
             self.serial.timeout = 0
             trackbytes = trackbytes + self.serial.readline()
             self.serial.timeout = None
-
         duration_trackread = int((time.time() - starttime_trackread)*1000)/1000
         self.total_duration_trackread += duration_trackread
 #        print  ("    Track read duration:                            " + str(duration_trackread) + " seconds")
@@ -546,7 +548,7 @@ class ArduinoFloppyControlInterface:
 
     def getDecompressedBitstream(self, track, head):
         compressedBytes = self.getCompressedTrackData(track, head)
-        table = { 0: "", 1: "01", 2: "001", 3: "0001"}
+        starttime_decompress = time.time()
         decompressedBitstream = ""
         #print( "Length of compressed bitstream: "+ str(len(compressedBitstream)) )
         for byte in compressedBytes:
@@ -555,13 +557,28 @@ class ArduinoFloppyControlInterface:
                 value=int(bits[chunk*2:chunk*2+2])&3
                 if value > 3:
                     print ("ERROR decompressBitstream illegal value!")
-                decompressedBitstream += table[value]
+                decompressedBitstream += self.decompressMap[value]
+
+        duration_decompress = int((time.time() - starttime_decompress)*1000)/1000
+#        print  ("    Decompress duration:                            " + str(duration_decompress) + " seconds")
+        self.total_duration_decompress += duration_decompress
         return decompressedBitstream
+        '''
+        Looking for a way to performance-improve this method. Tried to
+        experiment with bitstring.Bits(), but that appears to be way slower than
+        the code used now. Will come back to this at some point in the future.
+        Example code:
+            self.decompressMap2 = { '0b00': '', '0b01': '01', '0b10': '001', '0b11': '0001'}
+            b = bitstring.Bits(bytes = compressedBytes)
+            for bits in b.cut(2):
+                decompressedBitstream += self.decompressMap2[str(bits)]
+        '''
 
     def getStats(self):
         tdtr = str(int(self.total_duration_trackread*100)/100)
         tdtc = str(int(self.total_duration_cmds*100)/100)
-        return (tdtr, tdtc)
+        tdtd = str(int(self.total_duration_decompress*100)/100)
+        return (tdtr, tdtc, tdtd)
 
 class ArduinoSimulator(ArduinoFloppyControlInterface):
 
@@ -579,8 +596,8 @@ class ArduinoSimulator(ArduinoFloppyControlInterface):
         return True
 
     def getDecompressedBitstream(self, track, head):
-        if head == 0:
-            time.sleep(1)
+#        if head == 0:
+#            time.sleep(1)
         return self.rawTrackData[track][head]
 
 if __name__ == '__main__':
