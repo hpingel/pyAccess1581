@@ -239,8 +239,8 @@ class SingleIBMTrackSectorParser:
             (startPosDataMarker, endPosDataMarker) = (dataMarker.span() )
             if endPosDataMarker >= sectorMarkers[0] + self.diskFormat.legalOffsetRangeLowerBorder:
                 dataMarkersTmp.append(endPosDataMarker)
-            else:
-                print("Ignoring datamarker - is in front of first sector marker")
+            #else:
+            #    print("Notice: Ignoring datamarker - is in front of first sector marker")
         cnt = 0
         for dataMarker in dataMarkersTmp:
             offset = dataMarker - sectorMarkers[cnt]
