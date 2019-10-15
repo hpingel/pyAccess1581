@@ -116,7 +116,7 @@ class ArduinoFloppyControlInterface:
             self.openSerialConnection()
         if cmdname == "version" or self.connectionIsUsable(cmdname) is True:
             starttime_serialcmd = time.time()
-            #print ("...Processing cmd " + cmdname)
+            #print ("...Processing cmd '" + cmdname+ "'")
             self.serial.reset_input_buffer()
             self.serial.write( cmd + param)
             reply = self.serial.read(1)
@@ -129,11 +129,11 @@ class ArduinoFloppyControlInterface:
                 label2 = label + " " + str(param)
             else:
                 label2 = label
-#                print  ("    Serial cmd duration:                            " + str(duration_serialcmd) + " seconds " + label2)
-            #if (cmdname == "write_track"):
-            #    print ("Write track cmd: reply: " + str(reply))
-            if not reply == b'1': # or ( reply == b'Y' and cmdname == "write_track"):
-                raise Exception ( label2 + ": Something went wrong! Reply was " + str(reply))
+            if not reply == b'1':
+                if cmdname == "motor_on_write":
+                    raise Exception ( label2 + ": Something went wrong! Disk is probably write protected!")
+                else:
+                    raise Exception ( label2 + ": Something went wrong! Reply was " + str(reply))
         else:
             raise Exception ( label + ": Connection was not usable!")
 
@@ -153,33 +153,46 @@ class ArduinoFloppyControlInterface:
                 print ('ERROR: Head should be 0 or 1!')
 
     def writeTrackData(self, track, head, data):
+        '''
+        in which format do we provide the track data here? Let's have a look at
+        Robert Smith's sourcecode:
+        https://github.com/RobSmithDev/ArduinoFloppyDiskReader/
+        blob/master/FloppyDriveController.sketch/FloppyDriveController.sketch.ino
+        Quote: "Write a track to disk from the UART - the data should be
+        pre-MFM encoded raw track data where '1's are the pulses/phase
+        reversals to trigger"
+        '''
         datalen = len(data)
         if datalen > 65535:
             raise Exception ( "track data to write is far too long!")
-        datalen_hb = int(datalen / 255)
-        datalen_lb = datalen - (255 * datalen_hb)
-        print (f"Datalen: {datalen}, {datalen_hb}, {datalen_lb}")
         starttime_trackwrite = time.time()
+        self.sendCommand("motor_on_write")
         self.selectTrackAndHead(track, head)
-        self.sendCommand("enable_write")
-        self.sendCommand("write_track")
-        reply = self.serial.read(1)
-        print ("Reply after write track :" + str(reply))
-        #send data length high byte
-        self.serial.write( bytes( chr(datalen_hb),'utf-8' ))
-        #send data length low byte
-        self.serial.write( bytes( chr(datalen_lb),'utf-8' ))
-        #index pulse setting 1= WRITE FROM INDEX PULSE
-        self.serial.write( bytes( chr(1),'utf-8' ))
-        reply = self.serial.read(1)
-        print ("Reply pulse setting :" + str(reply))
-        if reply == b'!':
-            raise Exception("Track write stopped " + str(reply))
-        self.serial.write( bytes( data,'utf-8' ))
-        reply = self.serial.read(1)
-        if reply != b'1':
-            raise Exception("Track write failed " + str(reply))
-
+        self.sendCommand("write_track") #calls writeTrackFromUART in sketch
+        writingAllowd = self.serial.read(1)
+        #print ("Reply after write track :" + str(isWriteProtected)) # N/Y
+        isWriteProtected = True if writingAllowd == b'Y' else False
+        if isWriteProtected is True:
+            #calculate low byte and high byte of datalen
+            datalen_hb = int(datalen / 255)
+            datalen_lb = datalen - (255 * datalen_hb)
+            print (f"Datalen: {datalen}, {datalen_hb}, {datalen_lb}")
+            #send data length high byte
+            self.serial.write( bytes( chr(datalen_hb),'utf-8' ))
+            #send data length low byte
+            self.serial.write( bytes( chr(datalen_lb),'utf-8' ))
+            #index pulse setting 1= WRITE FROM INDEX PULSE
+            self.serial.write( bytes( chr(1),'utf-8' ))
+            reply = self.serial.read(1)
+            print ("Reply pulse setting :" + str(reply))
+            if reply != b'!':
+                raise Exception("Track write: We didn't get the '!' that we expected:" + str(reply))
+            self.serial.write( bytes( data + data ,'utf-8' ))
+            reply = self.serial.read(1)
+            if reply != b'1':
+                raise Exception("Track write failed " + str(reply))
+        else:
+            print ("Error: Disk is probably write protected.")
 
     def getCompressedTrackData(self, track, head):
         self.selectTrackAndHead(track, head)
