@@ -54,19 +54,25 @@ class ArduinoFloppyControlInterface:
         self.total_duration_cmds = 0
         self.total_duration_decompress = 0
         self.cmd = {
-            "version"     : ( b'?', "Detecting firmware version" ),
-            "motor_on"    : ( b'+', "Switching motor on" ),
-            "motor_off"   : ( b'-', "Switching motor off" ),
-            "rewind"      : ( b'.', "Rewinding to track 0"),
-            "head0"       : ( b'[', "Selecting head 0"),
-            "head1"       : ( b']', "Selecting head 1"),
-            "select_track": ( b'#', "Selecting track"), # not complete command without track number
-            "read_track"  : ( b'<', "Reading track"),
+            "version"        : ( b'?', "Detecting firmware version" ),
+                #returns firmware version, currently V1.3
+            "motor_on_read"  : ( b'+', "Switching motor on in read mode" ),
+                #if motor was already running it will be first switched off
+                #and on again, an active write mode will be disabled
+            "motor_on_write" : ( b'~', "Switching motor on in write mode"),
+                #if motor was already running it will be switched off
+                #and on again, write mode will be enabled
+            "motor_off"      : ( b'-', "Switching motor off" ),
+            "rewind"         : ( b'.', "Rewinding to track 0"),
+            "head0"          : ( b'[', "Selecting head 0"),#lower disk side
+            "head1"          : ( b']', "Selecting head 1"),#upper disk side
+            "select_track"   : ( b'#', "Selecting track"),
+                # incomplete without two digit track number
+                #"read_track"     : ( b'<', "Reading track"),
             "read_track_from_index_pulse" : ( bytes( '<' + chr(1),'utf-8'), "Reading track from index pulse"),  # combined command
             "read_track_ignoring_index_pulse" : ( bytes( '<' + chr(0),'utf-8'), "Instantly reading track"),  # combined command
-            "write_track" : ( b'>', "Writing track"),
-            "enable_write": ( b'~', "Enable writing"),
-            "erase_track" : ( b'X', "Erasing track"),
+            "write_track"    : ( b'>', "Writing track"),
+            "erase_track"    : ( b'X', "Erasing track"), # fills track with 0xAA
             #"diagnostics" : ( b'&', "Launching diagnostics routines")
         }
 
@@ -94,11 +100,11 @@ class ArduinoFloppyControlInterface:
         if cmd == "motor_off":
             self.isRunning = False
             executeCMD = True
-        elif cmd == "motor_on":
+        elif cmd == "motor_on_read":
             self.isRunning = True
             executeCMD = True
         elif self.isRunning is False: #and not cmd == "motor_on":
-            self.sendCommand("motor_on")
+            self.sendCommand("motor_on_read")
             executeCMD = True
         elif self.isRunning is True:
             executeCMD=True
