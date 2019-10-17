@@ -155,7 +155,9 @@ class SingleTrackSectorListValidator:
 
             if not sectorprops["sectorno"] in self.validSectorData:
                 crcCheck = self.isValidCRC(sectorprops)
-                #self.printSectorDebugOutput(sectorprops, crcCheck)
+                if not sectorprops["sectorlength"] == 2:
+                    print ("Warning: Here we have a non-512 byte sector length:")
+                    self.printSectorDebugOutput(sectorprops, crcCheck)
                 if crcCheck is True:
                     if int(sectorprops["sectorno"]) >= self.minSectorNumber and int(sectorprops["sectorno"]) <= self.diskFormat.expectedSectorsPerTrack:
                         self.validSectorData[ sectorprops["sectorno"] ] = sectorprops["data"]
