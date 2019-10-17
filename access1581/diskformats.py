@@ -52,7 +52,7 @@ class diskFormatDOS(diskFormatRoot):
         self.sectorStartMarkerLength = len( self.sectorStartMarker )
         self.sectorDataStartMarkerLength = len( self.sectorDataStartMarker )
         self.legalOffsetRangeLowerBorder = 704
-        self.legalOffsetRangeUpperBorder = 716
+        self.legalOffsetRangeUpperBorder = 720
         self.legalOffsetRange = range(self.legalOffsetRangeLowerBorder,self.legalOffsetRangeUpperBorder+1)
 
         #TODO: check value 1320 *8 bits. 512 bytes as data content wrapped in
