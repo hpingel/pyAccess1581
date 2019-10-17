@@ -169,10 +169,10 @@ class ArduinoFloppyControlInterface:
         self.sendCommand("motor_on_write")
         self.selectTrackAndHead(track, head)
         self.sendCommand("write_track") #calls writeTrackFromUART in sketch
-        writingAllowd = self.serial.read(1)
-        #print ("Reply after write track :" + str(isWriteProtected)) # N/Y
-        isWriteProtected = True if writingAllowd == b'Y' else False
-        if isWriteProtected is True:
+        writingAllowed = self.serial.read(1)
+        #print ("Reply after write track :" + str(writingAllowed)) # N/Y
+        isWriteProtected = False if writingAllowed == b'Y' else True
+        if isWriteProtected is False:
             #calculate low byte and high byte of datalen
             datalen_hb = int(datalen / 255)
             datalen_lb = datalen - (255 * datalen_hb)
