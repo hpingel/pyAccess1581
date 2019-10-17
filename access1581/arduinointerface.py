@@ -45,7 +45,7 @@ class ArduinoFloppyControlInterface:
         self.hexZeroByte = bytes(chr(0),'utf-8')
         self.decompressMap = { 0: "", 1: "01", 2: "001", 3: "0001"}
         self.connectionEstablished = False
-        self.ignoreIndexPulse = True
+        self.ignoreIndexPulse = False # more conservative and slower but works
         self.isRunning = False
         self.serial = False
         self.currentTrack = 100
