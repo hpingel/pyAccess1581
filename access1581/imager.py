@@ -102,7 +102,7 @@ class SingleTrackSectorListValidator:
         while self.retries > 0:
             if self.retries < self.maxRetries:
                 print ("  Repeat track read - attempt " + str( self.maxRetries - self.retries +1 ) + " of " + str(self.maxRetries) )
-            self.addValidSectors( self.trackParser.detectSectors(trackno, headno), trackno, headno )
+            self.addValidSectors( self.trackParser.detectSectors(trackno, headno), trackno, headno, (self.retries == 1))
             if self.storeBitstream is True:
                 self.decompressedBitstream = self.trackParser.getDecompressedBitstream()
             vsc = len(self.validSectorData)
@@ -144,7 +144,7 @@ class SingleTrackSectorListValidator:
         crc_header_check = sectorprops["crc_header"] == self.getCRC( self.diskFormat.sectorStartString + sectorprops["header"])
         return (crc_header_check and crc_data_check)
 
-    def addValidSectors(self, sectors, t, h):
+    def addValidSectors(self, sectors, t, h, lastChance):
         for sectorprops in sectors:
             isSameTrack = True if sectorprops['trackno'] == t else False
             if isSameTrack is False:
@@ -158,7 +158,10 @@ class SingleTrackSectorListValidator:
                 if not sectorprops["sectorlength"] == 2:
                     print ("Warning: Here we have a non-512 byte sector length:")
                     self.printSectorDebugOutput(sectorprops, crcCheck)
-                if crcCheck is True:
+                if crcCheck is False and lastChance is True:
+                    print (f'  Invalid CRC for sector found, but adding sector data anyway: Head {h}, Track {t}, sector #{sectorprops["sectorno"]}')
+
+                if crcCheck is True or lastChance is True:
                     if int(sectorprops["sectorno"]) >= self.minSectorNumber and int(sectorprops["sectorno"]) <= self.diskFormat.expectedSectorsPerTrack:
                         self.validSectorData[ sectorprops["sectorno"] ] = sectorprops["data"]
                     else:

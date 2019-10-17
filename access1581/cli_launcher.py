@@ -71,7 +71,7 @@ class launcher:
             raise Exception("Error: disk format " + options.disktype +  " is unknown")
         diskFormat = self.diskFormatTypes[ options.disktype ]()
         options.storeBitstream = False #tmp debug
-        IBMDoubleDensityFloppyDiskImager( diskFormat, options.outputImage, options.retries, options.serialDeviceName, options.storeBitstream )
+        IBMDoubleDensityFloppyDiskImager( diskFormat, options.outputImage, int(options.retries), options.serialDeviceName, options.storeBitstream )
 
     def getDocDiskType(self):
         dft = ''
