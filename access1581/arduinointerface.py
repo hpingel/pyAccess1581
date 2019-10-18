@@ -152,16 +152,22 @@ class ArduinoFloppyControlInterface:
             else:
                 print ('ERROR: Head should be 0 or 1!')
 
-    def eraseCurrentTrack(self):
-        self.sendCommand("erase_track")
+    def handleWriteProtection(self):
         writingAllowed = self.serial.read(1)
         isWriteProtected = False if writingAllowed == b'Y' else True
         if isWriteProtected is True:
-            print ("Error: Disk is probably write protected.")
+            print("Error: Disk is probably write protected.")
+            return False
         else:
-            eraseDone = self.serial.read(1)
-            if eraseDone != b'1':
-                raise Exception("Track erase failed " + str(reply))
+            return True
+
+    def eraseCurrentTrack(self):
+        self.sendCommand("erase_track")
+        if self.handleWriteProtection() is False:
+            return
+        eraseDone = self.serial.read(1)
+        if eraseDone != b'1':
+            raise Exception("Track erase failed " + str(reply))
 
     def writeTrackData(self, track, head, data):
         '''
@@ -181,29 +187,27 @@ class ArduinoFloppyControlInterface:
         self.selectTrackAndHead(track, head)
         self.eraseCurrentTrack()
         self.sendCommand("write_track") #calls writeTrackFromUART in sketch
-        writingAllowed = self.serial.read(1)
-        isWriteProtected = False if writingAllowed == b'Y' else True
-        if isWriteProtected is True:
-            print ("Error: Disk is probably write protected.")
-        else:
-            #calculate low byte and high byte of datalen
-            datalen_hb = int(datalen / 255)
-            datalen_lb = datalen - (255 * datalen_hb)
-            print (f"Datalen: {datalen}, {datalen_hb}, {datalen_lb}")
-            #send data length high byte
-            self.serial.write( bytes( chr(datalen_hb),'utf-8' ))
-            #send data length low byte
-            self.serial.write( bytes( chr(datalen_lb),'utf-8' ))
-            #index pulse setting 1= WRITE FROM INDEX PULSE
-            self.serial.write( bytes( chr(1),'utf-8' ))
-            reply = self.serial.read(1)
-            print ("Reply pulse setting :" + str(reply))
-            if reply != b'!':
-                raise Exception("Track write: We didn't get the '!' that we expected:" + str(reply))
-            self.serial.write( bytes( data + data ,'utf-8' ))
-            reply = self.serial.read(1)
-            if reply != b'1':
-                raise Exception("Track write failed " + str(reply))
+        if self.handleWriteProtection() is False:
+            return
+
+        #calculate low byte and high byte of datalen
+        datalen_hb = int(datalen / 255)
+        datalen_lb = datalen - (255 * datalen_hb)
+        print (f"Datalen: {datalen}, {datalen_hb}, {datalen_lb}")
+        #send data length high byte
+        self.serial.write( bytes( chr(datalen_hb),'utf-8' ))
+        #send data length low byte
+        self.serial.write( bytes( chr(datalen_lb),'utf-8' ))
+        #index pulse setting 1= WRITE FROM INDEX PULSE
+        self.serial.write( bytes( chr(1),'utf-8' ))
+        reply = self.serial.read(1)
+        print ("Reply pulse setting :" + str(reply))
+        if reply != b'!':
+            raise Exception("Track write: We didn't get the '!' that we expected:" + str(reply))
+        self.serial.write( bytes( data + data ,'utf-8' ))
+        reply = self.serial.read(1)
+        if reply != b'1':
+            raise Exception("Track write failed " + str(reply))
 
     def getCompressedTrackData(self, track, head):
         self.selectTrackAndHead(track, head)
