@@ -152,6 +152,17 @@ class ArduinoFloppyControlInterface:
             else:
                 print ('ERROR: Head should be 0 or 1!')
 
+    def eraseCurrentTrack(self):
+        self.sendCommand("erase_track")
+        writingAllowed = self.serial.read(1)
+        isWriteProtected = False if writingAllowed == b'Y' else True
+        if isWriteProtected is True:
+            print ("Error: Disk is probably write protected.")
+        else:
+            eraseDone = self.serial.read(1)
+            if eraseDone != b'1':
+                raise Exception("Track erase failed " + str(reply))
+
     def writeTrackData(self, track, head, data):
         '''
         in which format do we provide the track data here? Let's have a look at
@@ -168,11 +179,13 @@ class ArduinoFloppyControlInterface:
         starttime_trackwrite = time.time()
         self.sendCommand("motor_on_write")
         self.selectTrackAndHead(track, head)
+        self.eraseCurrentTrack()
         self.sendCommand("write_track") #calls writeTrackFromUART in sketch
         writingAllowed = self.serial.read(1)
-        #print ("Reply after write track :" + str(writingAllowed)) # N/Y
         isWriteProtected = False if writingAllowed == b'Y' else True
-        if isWriteProtected is False:
+        if isWriteProtected is True:
+            print ("Error: Disk is probably write protected.")
+        else:
             #calculate low byte and high byte of datalen
             datalen_hb = int(datalen / 255)
             datalen_lb = datalen - (255 * datalen_hb)
@@ -191,8 +204,6 @@ class ArduinoFloppyControlInterface:
             reply = self.serial.read(1)
             if reply != b'1':
                 raise Exception("Track write failed " + str(reply))
-        else:
-            print ("Error: Disk is probably write protected.")
 
     def getCompressedTrackData(self, track, head):
         self.selectTrackAndHead(track, head)
