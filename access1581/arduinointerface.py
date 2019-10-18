@@ -73,7 +73,7 @@ class ArduinoFloppyControlInterface:
             "read_track_ignoring_index_pulse" : ( bytes( '<' + chr(0),'utf-8'), "Instantly reading track"),  # combined command
             "write_track"    : ( b'>', "Writing track"),
             "erase_track"    : ( b'X', "Erasing track"), # fills track with 0xAA
-            #"diagnostics" : ( b'&', "Launching diagnostics routines")
+            "diagnostics" : ( b'&', "Launching diagnostics routines")
         }
 
     def __del__(self):
@@ -83,7 +83,7 @@ class ArduinoFloppyControlInterface:
             self.isRunning = False
             self.serial.close()
 
-    def setIgnoreIndexPulse( b ):
+    def setIgnoreIndexPulse(self, b ):
         self.ignoreIndexPulse = b
 
     def openSerialConnection(self):
@@ -100,10 +100,10 @@ class ArduinoFloppyControlInterface:
         if cmd == "motor_off":
             self.isRunning = False
             executeCMD = True
-        elif cmd == "motor_on_read":
+        elif cmd == "motor_on_read" or cmd == "motor_on_write":
             self.isRunning = True
             executeCMD = True
-        elif self.isRunning is False: #and not cmd == "motor_on":
+        elif self.isRunning is False:
             self.sendCommand("motor_on_read")
             executeCMD = True
         elif self.isRunning is True:
@@ -118,6 +118,7 @@ class ArduinoFloppyControlInterface:
             starttime_serialcmd = time.time()
             #print ("...Processing cmd '" + cmdname+ "'")
             self.serial.reset_input_buffer()
+            self.serial.reset_output_buffer()
             self.serial.write( cmd + param)
             reply = self.serial.read(1)
             if cmdname == "version":
@@ -136,6 +137,22 @@ class ArduinoFloppyControlInterface:
                     raise Exception ( label2 + ": Something went wrong! Reply was " + str(reply))
         else:
             raise Exception ( label + ": Connection was not usable!")
+
+    def testCTS(self):
+        print ("Starting CTS self test (diagnostics), please wait...")
+        self.sendCommand("motor_on_read")
+        self.serial.rtscts = False
+        for a in range(1, 10):
+            p = b'2' if a % 2 == 0 else b'1'
+            self.sendCommand("diagnostics", p)
+            #time.sleep(1)
+            ctsState = self.serial.cts
+            print( "Toggling CTS by sending diagnostics cmd + " + str(p) + " / State of CTS line: " + str(ctsState))
+            self.sendCommand("diagnostics")
+            if (ctsState is True and p == b'2') or (ctsState is False and p == b'1'):
+                raise Exception("Unexpected CTS state!")
+            #time.sleep(1)
+        print ("CTS test was successful.")
 
     def selectTrackAndHead(self, track, head):
         if self.currentTrack != track:
@@ -184,16 +201,19 @@ class ArduinoFloppyControlInterface:
             raise Exception ( "track data to write is far too long!")
         starttime_trackwrite = time.time()
         self.sendCommand("motor_on_write")
+        self.serial.rtscts = True
         self.selectTrackAndHead(track, head)
         self.eraseCurrentTrack()
         self.sendCommand("write_track") #calls writeTrackFromUART in sketch
         if self.handleWriteProtection() is False:
             return
 
+        byteData = bytes( data,'utf-8' )
+        lenByteData = len(byteData)
         #calculate low byte and high byte of datalen
         datalen_hb = int(datalen / 255)
         datalen_lb = datalen - (255 * datalen_hb)
-        print (f"Datalen: {datalen}, {datalen_hb}, {datalen_lb}")
+        print (f"Debug Datalengths: {datalen}, {datalen_hb}, {datalen_lb}, {lenByteData}")
         #send data length high byte
         self.serial.write( bytes( chr(datalen_hb),'utf-8' ))
         #send data length low byte
@@ -201,13 +221,23 @@ class ArduinoFloppyControlInterface:
         #index pulse setting 1= WRITE FROM INDEX PULSE
         self.serial.write( bytes( chr(1),'utf-8' ))
         reply = self.serial.read(1)
-        print ("Reply pulse setting :" + str(reply))
+        #print ("Reply pulse setting :" + str(reply))
         if reply != b'!':
             raise Exception("Track write: We didn't get the '!' that we expected:" + str(reply))
-        self.serial.write( bytes( data + data ,'utf-8' ))
+        self.serial.write( byteData )
+        self.serial.flush()#???
         reply = self.serial.read(1)
-        if reply != b'1':
+        if reply == b'X':
+            raise Exception("Track write failed: Buffer underflow")
+        elif reply != b'1':
             raise Exception("Track write failed " + str(reply))
+        self.serial.rtscts = False
+        self.serial.reset_input_buffer()
+        self.serial.reset_output_buffer()
+        print (f"Finished writing track {track} head {head}")
+        time.sleep(1)
+        #FIXME improve read/write motor switching
+        self.sendCommand("motor_on_read")#in case we were in write mode
 
     def getCompressedTrackData(self, track, head):
         self.selectTrackAndHead(track, head)
@@ -219,7 +249,12 @@ class ArduinoFloppyControlInterface:
         #speedup for Linux where pyserial seems to be very optimized
         if platform.system() == "Linux":
             trackbytes = self.serial.read_until( self.hexZeroByte , 12200)
+            #workaround for problematic disks
+            tracklength = len(trackbytes)
+            if tracklength < 10223:
+                print ("Track length suspicously short: " + str(tracklength) + " bytes")
         else:
+            self.serial.timeout = 1
             trackbytes = self.serial.read(10380)
             self.serial.timeout = 0
             trackbytes = trackbytes + self.serial.readline()

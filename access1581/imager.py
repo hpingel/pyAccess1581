@@ -33,8 +33,9 @@ class IBMDoubleDensityFloppyDiskImager:
     and collects all the sector data of all tracks
     to store it into an image file
     '''
-    def __init__( self, diskFormat, imagename, retries, serialDevice, storeBitstream = False ):
-        print ("pyAccess1581  Copyright (C) 2019  Henning Pingel")
+    def __init__( self, diskFormat, imagename, retries, serialDevice, storeBitstream = False, stopOnError=False):
+        print ("pyAccess1581 - Copyright (C) 2019  Henning Pingel")
+        print ("Reusing: Arduino Amiga Floppy Disk Reader/Writer Firmware - Copyright (C) 2019  Robert Smith")
         print ("Selected disk format is " + diskFormat.name + ", we expect " + str(diskFormat.expectedSectorsPerTrack) + " sectors per track")
         print ("Target image file is: " + imagename)
         print ("Serial device is: " + serialDevice)
@@ -43,7 +44,15 @@ class IBMDoubleDensityFloppyDiskImager:
         trackData = {}
         rawTracks = {}
         trackLength = diskFormat.expectedSectorsPerTrack * diskFormat.sectorSize
-        vldtr = SingleTrackSectorListValidator( retries, diskFormat, serialDevice, storeBitstream )
+        if serialDevice == "simulated":
+            with open('raw_debug_image_d81.py', 'r') as f:
+                rawTrackData = ast.literal_eval(f.read())
+            self.arduino = ArduinoSimulator(diskFormat, rawTrackData)
+        else:
+            self.arduino = ArduinoFloppyControlInterface(serialDevice, diskFormat)
+        self.arduino.openSerialConnection()
+
+        vldtr = SingleTrackSectorListValidator( retries, diskFormat, self.arduino, storeBitstream, stopOnError )
         for trackno in diskFormat.trackRange:
             trackData[ trackno ] = {}
             rawTracks[ trackno ] = {}
@@ -76,21 +85,17 @@ class SingleTrackSectorListValidator:
     structured data of all found sectors of one track. validates crc values and
     manages optional read retries.
     '''
-    def __init__(self, retries, diskFormat, serialDevice, storeBitstream = False):
+    def __init__(self, retries, diskFormat, arduinoInterface, storeBitstream = False, stopOnError = False):
         self.maxRetries = retries
         self.diskFormat = diskFormat
         self.minSectorNumber = 1
         self.validSectorData = {}
         self.storeBitstream = storeBitstream
         self.decompressedBitstream = ""
-        if serialDevice == "simulated":
-            with open('raw_debug_image_d81.py', 'r') as f:
-                rawTrackData = ast.literal_eval(f.read())
-            self.arduino = ArduinoSimulator(diskFormat, rawTrackData)
-        else:
-            self.arduino = ArduinoFloppyControlInterface(serialDevice, diskFormat)
+        self.arduino = arduinoInterface
         self.trackParser = SingleIBMTrackSectorParser(self.diskFormat, self.arduino)
-        self.arduino.openSerialConnection()
+        self.stopOnError = stopOnError
+        self.printSectorDebugInfo = False
 
     def printSerialStats(self):
         self.trackParser.printSerialStats()
@@ -103,8 +108,8 @@ class SingleTrackSectorListValidator:
             if self.retries < self.maxRetries:
                 print ("  Repeat track read - attempt " + str( self.maxRetries - self.retries +1 ) + " of " + str(self.maxRetries) )
             self.addValidSectors( self.trackParser.detectSectors(trackno, headno), trackno, headno, (self.retries == 1))
-            if self.storeBitstream is True:
-                self.decompressedBitstream = self.trackParser.getDecompressedBitstream()
+            #also make raw stream accessible for debug or other purposes
+            self.decompressedBitstream = self.trackParser.getDecompressedBitstream()
             vsc = len(self.validSectorData)
             print (f"Reading track: {trackno:2d}, head: {headno}. Number of valid sectors found: {vsc}/{self.diskFormat.expectedSectorsPerTrack}")
             if vsc == self.diskFormat.expectedSectorsPerTrack:
@@ -140,41 +145,56 @@ class SingleTrackSectorListValidator:
         return hex(binascii.crc_hqx(binascii.unhexlify(data), 0xffff))[2:].zfill(4)
 
     def isValidCRC(self, sectorprops):
-        crc_data_check   = sectorprops["crc_data"] == self.getCRC( self.diskFormat.sectorDataStartString + sectorprops["data"] )
-        crc_header_check = sectorprops["crc_header"] == self.getCRC( self.diskFormat.sectorStartString + sectorprops["header"])
+        crc_data_check   = sectorprops["crc_data"] == self.getCRC( sectorprops["datameta"] + sectorprops["data"] )
+        crc_header_check = sectorprops["crc_header"] == self.getCRC( sectorprops["headermeta"])
         return (crc_header_check and crc_data_check)
 
+    def handleError(self, msg, sectorprops):
+        if self.stopOnError is True:
+            crcCheck = self.isValidCRC(sectorprops)
+            self.printSectorDebugOutput(sectorprops, crcCheck)
+            raise Exception( "  Error: " + msg )
+        else:
+            print ("  Error: " + msg)
+            self.printSectorDebugInfo = True
+
     def addValidSectors(self, sectors, t, h, lastChance):
+        self.printSectorDebugInfo = False
+        printDebug = False
         for sectorprops in sectors:
             isSameTrack = True if sectorprops['trackno'] == t else False
-            if isSameTrack is False:
-                raise Exception( "Error: Wrong track number: " + str(sectorprops["trackno"]) )
             isSameHead  = True if sectorprops['sideno'] == h else False
-            if isSameHead is False:
-                raise Exception( "Error: Wrong head/side number: "+ str(sectorprops["sideno"]) + " Please check that you chose the right disk format (swapsides?)." )
 
+            if isSameTrack is False:
+                self.handleError( "Wrong track number: " + str(sectorprops["trackno"]), sectorprops )
+            if isSameHead is False:
+                self.handleError( "Wrong head/side number: "+ str(sectorprops["sideno"]) + " Please check that you chose the right disk format (swapsides?).",sectorprops )
+            if int(sectorprops["sectorno"]) < self.minSectorNumber or \
+                int(sectorprops["sectorno"]) > self.diskFormat.expectedSectorsPerTrack:
+                self.handleError( "Sector number is out of expected bounds: "+ str(sectorprops["sectorno"]),sectorprops )
+
+            crcCheck = self.isValidCRC(sectorprops)
             if not sectorprops["sectorno"] in self.validSectorData:
-                crcCheck = self.isValidCRC(sectorprops)
                 if not sectorprops["sectorlength"] == 2:
-                    print ("Warning: Here we have a non-512 byte sector length:")
-                    self.printSectorDebugOutput(sectorprops, crcCheck)
+                    self.handleError("Detected a non-512 byte sector length!",sectorprops)
                 if crcCheck is False and lastChance is True:
                     print (f'  Invalid CRC for sector found, but adding sector data anyway: Head {h}, Track {t}, sector #{sectorprops["sectorno"]}')
-
+                    self.printSectorDebugInfo = True
                 if crcCheck is True or lastChance is True:
-                    if int(sectorprops["sectorno"]) >= self.minSectorNumber and int(sectorprops["sectorno"]) <= self.diskFormat.expectedSectorsPerTrack:
-                        self.validSectorData[ sectorprops["sectorno"] ] = sectorprops["data"]
-                    else:
-                        raise Exception( "Sector number is out of expected bounds: "+ str(sectorprops["sectorno"]) )
+                    self.validSectorData[ sectorprops["sectorno"] ] = sectorprops["data"]
+            self.printSectorDebugInfo = True
+
+            if self.printSectorDebugInfo is True:
+                self.printSectorDebugOutput(sectorprops, crcCheck)
 
     def printSectorDebugOutput(self, sectorprops, crcCheck):
         infostring =""
         for prop in sectorprops:
-            if prop != "data" and prop != "crc_check":
+            if prop != "datameta" and prop != "data" and prop != "headermeta":
                 infostring += prop + ":" + str(sectorprops[prop]) + ", "
         infostring += "CRC check "
         infostring += "FAILED" if crcCheck is False else "SUCCESSFUL"
-        print ("- "+ infostring)
+        print ("  DEBUGINFO - Sector properties: "+ infostring)
 
 class SingleIBMTrackSectorParser:
     '''
@@ -187,6 +207,7 @@ class SingleIBMTrackSectorParser:
         self.arduino = arduinoFloppyControlInterface
         self.sectorDataBitSize = self.diskFormat.sectorSize * 16
         self.decompressedBitstream = ""
+        self.sectorStartMarkerLength = len(self.diskFormat.sectorStartMarker)
 
     def detectSectors(self, trackno, headno):
         cnt = 0
@@ -227,7 +248,9 @@ class SingleIBMTrackSectorParser:
         return self.convertBitstreamBytes( self.mfmDecode( self.currentSectorBitstream[ start: start+length ]), True)
 
     def grabSectorChunkInt( self, start, length):
-        return self.convertBitstreamBytes( self.mfmDecode( self.currentSectorBitstream[ start: start+length ]), False)
+        sfrom = start*8
+        sto = sfrom + length*8
+        return self.convertBitstreamBytes( self.mfmDecode( self.currentSectorBitstream[ sfrom: sto ]), False)
 
     def getMarkers(self):
         sectorMarkers = []
@@ -237,15 +260,16 @@ class SingleIBMTrackSectorParser:
         del rawSectors[-1] #delete last entry
         previousBits = 0
         for rawSector in rawSectors:
-            previousBits += len( rawSector ) + self.diskFormat.sectorStartMarkerLength
+            previousBits += len( rawSector ) + self.sectorStartMarkerLength
             sectorMarkers.append( previousBits )
         dataMarkerMatchesIterator = re.finditer( self.diskFormat.sectorDataStartMarker, self.decompressedBitstream)
-        for dataMarker in dataMarkerMatchesIterator:
-            (startPosDataMarker, endPosDataMarker) = (dataMarker.span() )
-            if endPosDataMarker >= sectorMarkers[0] + self.diskFormat.legalOffsetRangeLowerBorder:
-                dataMarkersTmp.append(endPosDataMarker)
-            #else:
-            #    print("Notice: Ignoring datamarker - is in front of first sector marker")
+        if len(sectorMarkers) > 0:
+            for dataMarker in dataMarkerMatchesIterator:
+                (startPosDataMarker, endPosDataMarker) = (dataMarker.span() )
+                if endPosDataMarker >= sectorMarkers[0] + self.diskFormat.legalOffsetRangeLowerBorder:
+                    dataMarkersTmp.append(endPosDataMarker)
+                #else:
+                #    print("Notice: Ignoring datamarker - is in front of first sector marker")
         cnt = 0
         for dataMarker in dataMarkersTmp:
             offset = dataMarker - sectorMarkers[cnt]
@@ -264,15 +288,21 @@ class SingleIBMTrackSectorParser:
         return (sectorMarkers, dataMarkers)
 
     def parseSingleSector(self, sectorStart, dataMarker):
-        dataMarker = dataMarker - sectorStart
-        self.currentSectorBitstream = self.decompressedBitstream[sectorStart : sectorStart + self.sectorDataBitSize + 32 + dataMarker]
+        prelude = 4 * 16 # a1a1a1fe or a1a1a1fb
+        dataMarker = prelude + dataMarker - sectorStart
+        self.currentSectorBitstream = self.decompressedBitstream[sectorStart - prelude : sectorStart + self.sectorDataBitSize + 32 + dataMarker]
+        #rawMfmDecoded = self.mfmDecode( self.currentSectorBitstream)
+        #rdl = len(rawMfmDecoded)
+        #rawstream = self.convertBitstreamBytes( rawMfmDecoded[0:int(rdl/4)*4], True)
+
         return {
-            "trackno"      : self.grabSectorChunkInt(  0, 16),
-            "sideno"       : self.grabSectorChunkInt( 16, 16),
-            "sectorno"     : self.grabSectorChunkInt( 32, 16),
-            "sectorlength" : self.grabSectorChunkInt( 56,  8),
-            "crc_header"   : self.grabSectorChunkHex( 64, 32),
-            "header"       : self.grabSectorChunkHex(  0, 64),#complete raw header data for crc check
+            "headermeta"   : self.grabSectorChunkHex(  0, 128),#complete raw header data for crc check
+            "trackno"      : self.grabSectorChunkInt(  8,  2),
+            "sideno"       : self.grabSectorChunkInt( 10,  2),
+            "sectorno"     : self.grabSectorChunkInt( 12,  2),
+            "sectorlength" : self.grabSectorChunkInt( 15,  1),
+            "crc_header"   : self.grabSectorChunkHex( 128, 32),
+            "datameta"     : self.grabSectorChunkHex( dataMarker - prelude, prelude), #a1a1a1fb
             "data"         : self.grabSectorChunkHex( dataMarker, self.sectorDataBitSize),
             "crc_data"     : self.grabSectorChunkHex( dataMarker + self.sectorDataBitSize, 32)
         }
