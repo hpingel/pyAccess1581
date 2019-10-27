@@ -186,7 +186,7 @@ class SingleTrackSectorListValidator:
                     self.printSectorDebugInfo = True
                 if crcCheck is True or lastChance is True:
                     self.validSectorData[ sectorprops["sectorno"] ] = sectorprops["data"]
-            self.printSectorDebugInfo = True
+            #self.printSectorDebugInfo = True
 
             if self.printSectorDebugInfo is True:
                 self.printSectorDebugOutput(sectorprops, crcCheck)
