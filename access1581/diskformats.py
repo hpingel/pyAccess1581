@@ -28,29 +28,26 @@
 
 class diskFormatRoot:
     def __init__(self):
-        self.name                   = 'root'
-        self.trackRange             = range(0,80) #0-79
-        self.headRange              = range(0,2)  #0-1
-        self.sectorSize             = 512 # bytes
-        self.swapsides              = False
-        self.sectorStartStringPrefix = ""
-        self.sectorDataStartStringPrefix = ""
-        self.imageExtension         = 'img'
+        self.name           = 'root'
+        self.trackRange     = range(0,80) #0-79
+        self.headRange      = range(0,2)  #0-1
+        self.sectorSize     = 512 # bytes
+        self.swapsides      = False
+        self.imageExtension = 'img'
+        self.mfmSyncMarkA1  = '100010010001001' #special mfm sync mark
 
 class diskFormatDOS(diskFormatRoot):
     def __init__(self):
         super().__init__()
-        self.name                   = 'ibmdos'
-        self.sectorStartString      = "a1a1a1fe"
-        self.sectorDataStartString  = "a1a1a1fb"
+        self.name  = 'ibmdos'
+        self.mfmFE = '101010101010100' #mfm encoded fe
+        self.mfmFB = '101010101000101' #mfm encoded fb
+        self.mfm00 = '010101010101010' #mfm encoded 00
         self.expectedSectorsPerTrack = 9
-        self.sectorStartStringPrefix = "000000000000"
-        self.sectorDataStartStringPrefix = "00"
-
-        self.sectorStartMarker = self.getFlexibleRegExString( self.sectorStartStringPrefix + self.sectorStartString)
-        self.sectorDataStartMarker = self.getFlexibleRegExString( self.sectorDataStartStringPrefix + self.sectorDataStartString )
-        self.sectorStartMarkerLength = len( self.sectorStartMarker )
-        self.sectorDataStartMarkerLength = len( self.sectorDataStartMarker )
+        self.sectorStartSyncMarker = ((self.mfmSyncMarkA1 + '0')*3) + self.mfmFE
+        self.sectorStartMarker     = (('1' + self.mfm00 )*10)[1:] + '0' + self.sectorStartSyncMarker
+        #self.sectorStartMarker     = ((self.mfmSyncMarkA1 + '0')*3) + self.mfmFE
+        self.sectorDataStartMarker = (('1' + self.mfm00 )*6)[1:] + '0' + ((self.mfmSyncMarkA1 + '0')*3) + self.mfmFB
         self.legalOffsetRangeLowerBorder = 704
         self.legalOffsetRangeUpperBorder = 720
         self.legalOffsetRange = range(self.legalOffsetRangeLowerBorder,self.legalOffsetRangeUpperBorder+1)
@@ -60,19 +57,13 @@ class diskFormatDOS(diskFormatRoot):
         #maybe we can shrink it more
         self.sectorLength = 1320*8
 
-    def getFlexibleRegExString( self, hexString ):
-        searchKey = self.hexString2bitString( hexString )
-        regExString = ""
-        for bit in searchKey:
-            regExString += "." + bit
-        regExString = regExString[1:]
-        return regExString
-
+    '''
     def hexString2bitString(self, hexString ):
         bitString = ""
         for nibble in hexString:
             bitString += str(bin(int(nibble,16))[2:]).zfill(4)
         return bitString
+    '''
 
 class diskFormat1581(diskFormatDOS):
     def __init__(self):
