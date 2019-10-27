@@ -293,8 +293,8 @@ class SingleIBMTrackSectorParser:
                 else:
                     #print("Removing sector marker because it overshot the bitstream")
                     sectorMarkers.remove(sectorMarkers[cnt])
-        print (sectorMarkers)
-        print (dataMarkers)
+        #print (sectorMarkers)
+        #print (dataMarkers)
         return (sectorMarkers, dataMarkers)
 
     def getFirstSectorOffset(self):
