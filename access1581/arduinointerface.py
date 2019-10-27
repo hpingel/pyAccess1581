@@ -48,8 +48,8 @@ class ArduinoFloppyControlInterface:
         self.ignoreIndexPulse = False # more conservative and slower but works
         self.isRunning = False
         self.serial = False
-        self.currentTrack = 100
-        self.currentHead = 2
+        self.currentTrack = 100 #invalid value on purpose
+        self.currentHead = 2 #invalid value on purpose
         self.total_duration_trackread = 0
         self.total_duration_cmds = 0
         self.total_duration_decompress = 0
